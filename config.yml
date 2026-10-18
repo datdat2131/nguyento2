@@ -1,0 +1,94 @@
+# ======================================================================
+#  NGUYÊN TỐ - FILE CẤU HÌNH
+#  Sửa xong gõ  /nguyento reload  trong game (không cần restart server).
+#  - Đặt một giá trị = 0 để tắt buff đó (dòng mô tả trong GUI cũng tự ẩn).
+#  - Mô tả hiển thị dưới mỗi nguyên tố trong GUI tự cập nhật theo file này.
+#  - Các số có chữ "percent" / "chance" tính theo %, ví dụ 20 = 20%.
+#  - "damage" = sát thương cộng thêm, "max-health" = máu tối đa (2 máu = 1 tim).
+# ======================================================================
+
+general:
+  skills-hit-players: true   # chiêu thức có ảnh hưởng người chơi khác không
+  skills-hit-mobs: true      # chiêu thức có ảnh hưởng quái/động vật không
+  show-skill-hud: true       # hiện trạng thái hồi chiêu trên thanh action bar
+
+elements:
+
+  # ---------------- LỬA ----------------
+  # Buff: kháng lửa (cố định), +damage, +máu | Nội tại: gây cháy
+  lua:
+    damage: 1
+    max-health: 2
+    ignite-chance: 20        # % gây cháy khi tấn công
+    ignite-seconds: 2        # cháy bao nhiêu giây
+
+  # ---------------- BĂNG ----------------
+  # (Bạn ghi "+0,5 speed" -> mình hiểu là +5% tốc độ. Sửa lại nếu muốn.)
+  bang:
+    speed-percent: 5
+    max-health: 2
+    slow-chance: 15          # % làm chậm mục tiêu khi tấn công
+    slow-seconds: 2
+    slow-amplifier: 1        # 0 = Chậm I, 1 = Chậm II, ...
+
+  # ---------------- NƯỚC ----------------
+  nuoc:
+    heal-bonus-percent: 20   # +% lượng máu hồi nhận được
+    max-health: 3
+    heal-on-hit-chance: 10   # % hồi máu khi tấn công
+    heal-on-hit-amount: 2    # lượng máu hồi (2 = 1 tim)
+
+  # ---------------- ĐẤT ----------------
+  dat:
+    armor-percent: 20        # +% giáp (nhân với tổng giáp đang có)
+    max-health: 4
+
+  # ---------------- GIÓ ----------------
+  gio:
+    speed-percent: 15
+    attack-speed-percent: 10
+    dodge-chance: 10         # % né đòn
+
+  # ---------------- SÉT ----------------
+  set:
+    damage: 2
+    attack-speed-percent: 5
+    lightning-chance: 10     # % phóng điện khi tấn công
+    lightning-damage: 4      # sát thương mỗi lần phóng điện
+    lightning-radius: 3      # bán kính lan điện (block)
+
+  # ---------------- BÓNG TỐI (HUYỀN THOẠI) ----------------
+  bong_toi:
+    damage: 3
+    lifesteal-percent: 10    # % sát thương gây ra hồi lại thành máu
+    dark-chance: 15          # % đòn đánh có thêm sát thương bóng tối
+    dark-bonus-percent: 30   # +% sát thương khi nội tại kích hoạt
+    # Chiêu: trang bị Ô 1, nhận vật phẩm kỹ năng và chuột phải để dùng
+    skill:
+      cooldown: 120          # hồi chiêu (giây)
+      duration: 10           # thời gian lãnh địa (giây)
+      radius: 7              # bán kính lãnh địa (block)
+      owner-speed-amplifier: 1        # tăng tốc cho bản thân (0 = Speed I, 1 = Speed II)
+      owner-bonus-damage: 1.5         # +sát thương trong lãnh địa
+      owner-extra-lifesteal-percent: 15   # +% hút máu trong lãnh địa
+      enemy-slow-amplifier: 1         # kẻ địch bị chậm (0 = Chậm I, 1 = Chậm II)
+      enemy-nausea: 1                 # 1 = gây buồn nôn, 0 = tắt
+
+  # ---------------- ÁNH SÁNG (HUYỀN THOẠI) ----------------
+  # (Bạn ghi "+15% sát thương nhận vào" -> mình hiểu là GIẢM 15% sát thương nhận vào.
+  #  Muốn tăng sát thương nhận thì điền số âm, ví dụ -15.)
+  anh_sang:
+    damage: 2
+    damage-reduction-percent: 15
+    # Nội tại ẩn: lá chắn máu vàng khi máu thấp
+    shield:
+      health-threshold-percent: 20   # kích hoạt khi máu dưới % này
+      shield-percent: 30             # lá chắn = % máu tối đa
+      cooldown: 30                   # hồi (giây)
+      duration-seconds: 15           # lá chắn tồn tại tối đa (giây)
+    # Chiêu cuối Thần Phạt: trang bị Ô 1, nhận vật phẩm kỹ năng và chuột phải để dùng
+    skill:
+      cooldown: 120
+      radius: 10
+      damage: 70
+      cast-delay-ticks: 20           # thời gian báo trước (20 tick = 1 giây), 0 = đánh ngay

@@ -1,8 +1,8 @@
 name: NguyenTo
-version: 1.0.0
+version: 1.1.0
 main: vn.nguyento.NguyenToPlugin
 api-version: '1.20'
-description: He thong nguyen to bay quanh nguoi choi, nhan bang cuon giay
+description: He thong nguyen to bay quanh nguoi choi, buff, chieu thuc, cuon giay
 commands:
   nguyento:
     description: Mo menu nguyen to
@@ -13,5 +13,5 @@ permissions:
     description: Dung menu nguyen to
     default: true
   nguyento.admin:
-    description: Cho cuon giay / mo khoa nguyen to
+    description: Cho cuon giay / mo khoa / reload
     default: op

@@ -31,18 +31,20 @@
     </dependencies>
 
     <build>
-        <finalName>NguyenTo</finalName>
-        <!-- Flat layout: Java source and plugin.yml are in the repository root. -->
         <sourceDirectory>${project.basedir}</sourceDirectory>
         <resources>
             <resource>
                 <directory>${project.basedir}</directory>
+                <filtering>true</filtering>
+                <includes><include>plugin.yml</include></includes>
+            </resource>
+            <resource>
+                <directory>${project.basedir}</directory>
                 <filtering>false</filtering>
-                <includes>
-                    <include>plugin.yml</include>
-                </includes>
+                <includes><include>config.yml</include></includes>
             </resource>
         </resources>
+        <finalName>NguyenTo</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

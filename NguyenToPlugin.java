@@ -16,21 +16,32 @@ import java.util.Locale;
 
 public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCompleter {
 
+    private Settings settings;
     private ElementManager manager;
+    private SkillManager skills;
+    private SkillItems items;
     private ElementGui gui;
 
     @Override
     public void onEnable() {
-        manager = new ElementManager(this);
-        gui = new ElementGui(manager);
+        settings = new Settings(this);
+        manager = new ElementManager(this, settings);
+        skills = new SkillManager(this, manager, settings);
+        gui = new ElementGui(manager, settings);
+        items = new SkillItems(this, manager);
+        manager.setSkillItems(items);
 
         Bukkit.getPluginManager().registerEvents(gui, this);
         Bukkit.getPluginManager().registerEvents(new ElementListener(manager), this);
+        Bukkit.getPluginManager().registerEvents(new CombatListener(this, manager, settings, skills), this);
+        Bukkit.getPluginManager().registerEvents(new SkillItemListener(this, items, skills), this);
 
         getCommand("nguyento").setExecutor(this);
         getCommand("nguyento").setTabCompleter(this);
 
         manager.startTask();
+        skills.startTask();
+        items.startTask();
         // hỗ trợ /reload
         for (Player p : Bukkit.getOnlinePlayers()) manager.load(p);
         getLogger().info("NguyenTo da bat!");
@@ -38,6 +49,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
 
     @Override
     public void onDisable() {
+        if (skills != null) skills.shutdown();
         if (manager != null) manager.shutdown();
     }
 
@@ -53,6 +65,17 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         }
 
         String sub = args[0].toLowerCase(Locale.ROOT);
+
+        if (sub.equals("reload")) {
+            if (!sender.hasPermission("nguyento.admin")) {
+                sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
+                return true;
+            }
+            settings.reload();
+            manager.reloadStats();
+            sender.sendMessage("§aĐã tải lại config.yml! Buff mới đã được áp dụng.");
+            return true;
+        }
 
         if (sub.equals("give") || sub.equals("unlock")) {
             if (!sender.hasPermission("nguyento.admin")) {
@@ -111,6 +134,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         if (sender.hasPermission("nguyento.admin")) {
             sender.sendMessage("§e/nguyento give <người chơi> <nguyên tố|all> [số lượng] §7- đưa cuộn giấy");
             sender.sendMessage("§e/nguyento unlock <người chơi> <nguyên tố|all> §7- mở khóa trực tiếp");
+            sender.sendMessage("§e/nguyento reload §7- tải lại config.yml");
         }
         return true;
     }
@@ -127,14 +151,15 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
     @Override
     public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
         List<String> out = new ArrayList<>();
-        if (!sender.hasPermission("nguyento.admin")) return out;
         if (args.length == 1) {
-            out.addAll(Arrays.asList("give", "unlock"));
-        } else if (args.length == 2) {
-            for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
-        } else if (args.length == 3) {
-            out.add("all");
-            for (Element e : Element.values()) out.add(e.getId());
+            if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reload"));
+        } else if (sender.hasPermission("nguyento.admin")) {
+            if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock"))) {
+                for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
+            } else if (args.length == 3 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock"))) {
+                out.add("all");
+                for (Element e : Element.values()) out.add(e.getId());
+            }
         }
         String last = args[args.length - 1].toLowerCase(Locale.ROOT);
         out.removeIf(s -> !s.toLowerCase(Locale.ROOT).startsWith(last));

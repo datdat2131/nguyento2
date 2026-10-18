@@ -17,31 +17,34 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/** Menu trang bị / tắt nguyên tố. */
+/** Menu trang bị / tắt nguyên tố (kèm mô tả buff, nội tại, chiêu). */
 public class ElementGui implements Listener {
 
     private static final String TITLE = "§8✦ §5Nguyên Tố §8✦";
+    private static final int SIZE = 45;
     private static final int[] EQUIP_SLOTS = {2, 4, 6};
-    private static final int[] ELEMENT_SLOTS = {10, 11, 12, 14, 15, 16};
     private static final int INFO_SLOT = 13;
-    private static final int CLEAR_SLOT = 22;
+    private static final int CLEAR_SLOT = 40;
     private static final String[] SLOT_NAMES = {"Trên đầu", "Vai trái", "Vai phải"};
 
     private final ElementManager manager;
+    private final Settings settings;
 
-    public ElementGui(ElementManager manager) {
+    public ElementGui(ElementManager manager, Settings settings) {
         this.manager = manager;
+        this.settings = settings;
     }
 
     private static class Holder implements InventoryHolder {
         Inventory inv;
+
         @Override
         public Inventory getInventory() { return inv; }
     }
 
     public void open(Player p) {
         Holder holder = new Holder();
-        Inventory inv = Bukkit.createInventory(holder, 27, TITLE);
+        Inventory inv = Bukkit.createInventory(holder, SIZE, TITLE);
         holder.inv = inv;
         render(inv, p);
         p.openInventory(inv);
@@ -73,25 +76,9 @@ public class ElementGui implements Listener {
             }
         }
 
-        // danh sách nguyên tố
-        Element[] all = Element.values();
-        for (int i = 0; i < ELEMENT_SLOTS.length && i < all.length; i++) {
-            Element e = all[i];
-            if (!owned.contains(e)) {
-                inv.setItem(ELEMENT_SLOTS[i], icon(Material.GRAY_DYE,
-                        "§8??? §7Nguyên Tố " + e.getName(),
-                        List.of("", "§cChưa sở hữu", "§7Dùng cuộn giấy để lĩnh ngộ"), false));
-            } else if (eq.contains(e)) {
-                int slot = eq.indexOf(e);
-                inv.setItem(ELEMENT_SLOTS[i], icon(e.getMaterial(),
-                        e.getColor() + "§l" + e.getName(),
-                        List.of("", "§aĐang trang bị §7(Ô " + (slot + 1) + " • " + SLOT_NAMES[slot] + ")",
-                                "§7Click để §ctắt"), true));
-            } else {
-                inv.setItem(ELEMENT_SLOTS[i], icon(e.getMaterial(),
-                        e.getColor() + "§l" + e.getName(),
-                        List.of("", "§7Đã sở hữu", "§7Click để §atrang bị"), false));
-            }
+        // các nguyên tố (vị trí lấy từ Element.getGuiSlot)
+        for (Element e : Element.values()) {
+            inv.setItem(e.getGuiSlot(), elementIcon(e, eq, owned));
         }
 
         inv.setItem(INFO_SLOT, icon(Material.BOOK, "§eHướng dẫn", Arrays.asList(
@@ -100,10 +87,41 @@ public class ElementGui implements Listener {
                 "§7• Ô 1: bay trên đầu",
                 "§7• Ô 2, 3: lơ lửng hai bên vai",
                 "§7• Click nguyên tố để bật / tắt",
-                "§7• Nhận nguyên tố bằng cuộn giấy"), false));
+                "§7• Nhận nguyên tố bằng cuộn giấy",
+                "",
+                "§cChiêu thức §7chỉ dùng được khi nguyên tố",
+                "§7nằm ở §fÔ 1§7. Bạn sẽ nhận một vật phẩm kỹ năng,",
+                "§7§fchuột phải §7vật phẩm đó để dùng chiêu.",
+                "§8(Vật phẩm bất ly thân, không vứt/cất được)"), false));
 
         inv.setItem(CLEAR_SLOT, icon(Material.BARRIER, "§cTắt tất cả",
                 List.of("", "§7Gỡ toàn bộ nguyên tố đang trang bị"), false));
+    }
+
+    private ItemStack elementIcon(Element e, List<Element> eq, List<Element> owned) {
+        boolean has = owned.contains(e);
+        boolean on = eq.contains(e);
+
+        List<String> lore = new ArrayList<>();
+        lore.add(e.rarityLine());
+        lore.add("");
+        lore.addAll(settings.describe(e));
+        lore.add("");
+        if (!has) {
+            lore.add("§cChưa sở hữu §7- dùng cuộn giấy để lĩnh ngộ");
+        } else if (on) {
+            int slot = eq.indexOf(e);
+            lore.add("§aĐang trang bị §7(Ô " + (slot + 1) + " • " + SLOT_NAMES[slot] + ")");
+            lore.add("§7Click để §ctắt");
+        } else {
+            lore.add("§7Đã sở hữu • Click để §atrang bị");
+        }
+
+        if (!has) {
+            return icon(Material.GRAY_DYE, "§8✖ §7Nguyên Tố " + e.getName(), lore, false);
+        }
+        String name = e.getColor() + "§l" + e.getName();
+        return icon(e.getMaterial(), name, lore, on || e.isSpecial());
     }
 
     private ItemStack icon(Material mat, String name, List<String> lore, boolean glow) {
@@ -145,10 +163,9 @@ public class ElementGui implements Listener {
         }
 
         // click vào nguyên tố
-        Element[] all = Element.values();
-        for (int i = 0; i < ELEMENT_SLOTS.length && i < all.length; i++) {
-            if (slot == ELEMENT_SLOTS[i]) {
-                handleElement(p, all[i]);
+        for (Element el : Element.values()) {
+            if (slot == el.getGuiSlot()) {
+                handleElement(p, el);
                 changed = true;
             }
         }
@@ -185,6 +202,9 @@ public class ElementGui implements Listener {
         } else if (r == ElementManager.EquipResult.OK) {
             int slot = manager.getEquipped(p).indexOf(el);
             p.sendMessage("§aĐã trang bị nguyên tố " + el.colored() + " §7(" + SLOT_NAMES[slot] + ")§a.");
+            if (slot == 0 && el.isSpecial()) {
+                p.sendMessage("§7Ở Ô 1: bạn nhận vật phẩm kỹ năng, §fchuột phải §7để dùng chiêu.");
+            }
             p.playSound(p.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.6f, 1.6f);
         }
     }
