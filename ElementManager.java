@@ -28,9 +28,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -38,17 +40,8 @@ import java.util.stream.Collectors;
 public class ElementManager {
 
     public static final int MAX_EQUIPPED = 3;
-    private static final String MOD_PREFIX = "nguyento:";
 
     public enum EquipResult { OK, NOT_OWNED, ALREADY, FULL }
-
-    private static final Attribute[] STAT_ATTRIBUTES = {
-            Attribute.GENERIC_MAX_HEALTH,
-            Attribute.GENERIC_ATTACK_DAMAGE,
-            Attribute.GENERIC_MOVEMENT_SPEED,
-            Attribute.GENERIC_ATTACK_SPEED,
-            Attribute.GENERIC_ARMOR
-    };
 
     private static class Orbit {
         final Element element;
@@ -64,20 +57,16 @@ public class ElementManager {
         }
     }
 
-    private static class Mod {
-        final Attribute attr;
-        final String name;
-        final UUID id;
-        final double amount;
-        final AttributeModifier.Operation op;
-        boolean applied = false;
+    /** UUID các modifier mà bản cũ của plugin từng gắn lên người chơi (dùng để dọn buff bị kẹt). */
+    private static final Set<UUID> LEGACY_IDS = new HashSet<>();
 
-        Mod(Attribute attr, String name, double amount, AttributeModifier.Operation op) {
-            this.attr = attr;
-            this.name = name;
-            this.id = UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
-            this.amount = amount;
-            this.op = op;
+    static {
+        String[] stats = {"hp", "damage", "speed", "attackspeed", "armor"};
+        for (Element e : Element.values()) {
+            for (String st : stats) {
+                LEGACY_IDS.add(UUID.nameUUIDFromBytes(
+                        ("nguyento:" + e.getId() + ":" + st).getBytes(StandardCharsets.UTF_8)));
+            }
         }
     }
 
@@ -86,6 +75,9 @@ public class ElementManager {
     private final NamespacedKey ownedKey;
     private final NamespacedKey equippedKey;
     private final NamespacedKey scrollKey;
+    private final NamespacedKey statFlagKey;
+    private boolean warnedStats = false;
+    private boolean warnedGeneral = false;
 
     private final Map<UUID, List<Element>> equipped = new HashMap<>();
     private final Map<UUID, List<Orbit>> orbits = new HashMap<>();
@@ -105,6 +97,20 @@ public class ElementManager {
         this.ownedKey = new NamespacedKey(plugin, "owned");
         this.equippedKey = new NamespacedKey(plugin, "equipped");
         this.scrollKey = new NamespacedKey(plugin, "scroll");
+        this.statFlagKey = new NamespacedKey(plugin, "statflag");
+    }
+
+    /** Chạy một bước mà không để lỗi ở bước đó làm hỏng cả quá trình trang bị. */
+    private void safe(Runnable r) {
+        try {
+            r.run();
+        } catch (Throwable t) {
+            if (!warnedGeneral) {
+                warnedGeneral = true;
+                plugin.getLogger().warning("Loi khi xu ly nguyen to (" + Bukkit.getVersion() + "): " + t);
+                t.printStackTrace();
+            }
+        }
     }
 
     public void setSkillItems(SkillItems skillItems) {
@@ -180,56 +186,108 @@ public class ElementManager {
         if (list.contains(e)) return EquipResult.ALREADY;
         if (list.size() >= MAX_EQUIPPED) return EquipResult.FULL;
         list.add(e);
-        saveEquipped(p);
-        applyStats(p);
-        rebuild(p);
-        syncSkillItem(p);
+        refreshAfterChange(p);
         return EquipResult.OK;
     }
 
     public void unequip(Player p, Element e) {
         List<Element> list = equipped.get(p.getUniqueId());
         if (list == null || !list.remove(e)) return;
-        saveEquipped(p);
-        applyStats(p);
-        rebuild(p);
-        syncSkillItem(p);
+        refreshAfterChange(p);
     }
 
     public void unequipAll(Player p) {
         List<Element> list = equipped.get(p.getUniqueId());
         if (list == null || list.isEmpty()) return;
         list.clear();
-        saveEquipped(p);
-        applyStats(p);
-        rebuild(p);
-        syncSkillItem(p);
+        refreshAfterChange(p);
     }
 
+    /** Sau mỗi lần đổi trang bị: áp lại buff, dựng lại nguyên tố bay, đồng bộ vật phẩm kỹ năng. Mỗi bước độc lập. */
+    private void refreshAfterChange(Player p) {
+        safe(() -> applyStats(p));
+        safe(() -> rebuild(p));
+        safe(() -> syncSkillItem(p));
+    }
+
+    /**
+     * Vào game: LUÔN bắt đầu với 0 nguyên tố trang bị (quyền sở hữu vẫn giữ).
+     * Dọn sạch buff còn sót từ lần trước / từ các bản plugin cũ.
+     */
     public void load(Player p) {
-        List<Element> owned = getOwned(p);
-        List<Element> eq = parse(p.getPersistentDataContainer().get(equippedKey, PersistentDataType.STRING));
-        eq.removeIf(e -> !owned.contains(e));
-        while (eq.size() > MAX_EQUIPPED) eq.remove(eq.size() - 1);
-        equipped.put(p.getUniqueId(), eq);
-        applyStats(p);
-        rebuild(p);
-        syncSkillItem(p);
+        safe(() -> purgeLegacyModifiers(p));
+        p.getPersistentDataContainer().remove(equippedKey);
+        equipped.put(p.getUniqueId(), new ArrayList<>());
+        safe(() -> despawn(p));
+        safe(() -> syncStats(p, Collections.emptyList()));
+        safe(() -> syncSkillItem(p));
     }
 
+    /** Thoát game: tự động bỏ trang bị toàn bộ, buff reset, vật phẩm kỹ năng bị thu hồi. */
     public void unload(Player p) {
-        if (skillItems != null) skillItems.removeAll(p);
-        despawn(p);
-        syncStats(p, Collections.emptyList());
+        safe(() -> {
+            if (skillItems != null) skillItems.removeAll(p);
+        });
+        safe(() -> despawn(p));
+        List<Element> list = equipped.get(p.getUniqueId());
+        if (list != null) list.clear();
+        p.getPersistentDataContainer().remove(equippedKey);
+        safe(() -> syncStats(p, Collections.emptyList()));
         equipped.remove(p.getUniqueId());
+    }
+
+    /** Đặt lại hoàn toàn một người chơi: bỏ trang bị, xóa buff kẹt, chỉ số về mặc định. */
+    public void resetPlayer(Player p) {
+        safe(() -> purgeLegacyModifiers(p));
+        List<Element> list = equipped.computeIfAbsent(p.getUniqueId(), k -> new ArrayList<>());
+        list.clear();
+        p.getPersistentDataContainer().remove(equippedKey);
+        safe(() -> {
+            setBase(p, Attrs.MAX_HEALTH, DEF_HEALTH);
+            setBase(p, Attrs.ATTACK_DAMAGE, DEF_DAMAGE);
+            setBase(p, Attrs.MOVEMENT_SPEED, DEF_SPEED);
+            setBase(p, Attrs.ATTACK_SPEED, DEF_ATTACK_SPEED);
+            setBase(p, Attrs.ARMOR, DEF_ARMOR);
+            p.getPersistentDataContainer().remove(statFlagKey);
+        });
+        safe(() -> rebuild(p));
+        safe(() -> syncSkillItem(p));
+    }
+
+    /** Gỡ các AttributeModifier do bản plugin cũ để lại (nguyên nhân buff "vĩnh viễn không xóa"). */
+    private void purgeLegacyModifiers(Player p) {
+        Attribute[] attrs = {Attrs.MAX_HEALTH, Attrs.ATTACK_DAMAGE, Attrs.MOVEMENT_SPEED,
+                Attrs.ATTACK_SPEED, Attrs.ARMOR};
+        for (Attribute a : attrs) {
+            if (a == null) continue;
+            AttributeInstance inst = p.getAttribute(a);
+            if (inst == null) continue;
+            for (AttributeModifier m : new ArrayList<>(inst.getModifiers())) {
+                boolean ours = false;
+                try {
+                    String n = m.getName();
+                    ours = n != null && n.startsWith("nguyento");
+                } catch (Throwable ignored) {
+                    // bỏ qua
+                }
+                if (!ours) {
+                    try {
+                        ours = LEGACY_IDS.contains(m.getUniqueId());
+                    } catch (Throwable ignored) {
+                        // bỏ qua
+                    }
+                }
+                if (ours) inst.removeModifier(m);
+            }
+        }
     }
 
     /** Gọi sau khi /nguyento reload để áp lại chỉ số mới. */
     public void reloadStats() {
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (equipped.containsKey(p.getUniqueId())) {
-                applyStats(p);
-                rebuild(p);
+                safe(() -> applyStats(p));
+                safe(() -> rebuild(p));
             }
         }
     }
@@ -238,13 +296,12 @@ public class ElementManager {
     public void refreshLater(Player p) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (!p.isOnline() || !equipped.containsKey(p.getUniqueId())) return;
-            applyStats(p);
-            rebuild(p);
-            syncSkillItem(p);
+            refreshAfterChange(p);
         });
     }
 
     private double val(Player p, Attribute a) {
+        if (a == null) return 0;
         AttributeInstance inst = p.getAttribute(a);
         return inst == null ? 0 : inst.getValue();
     }
@@ -260,16 +317,17 @@ public class ElementManager {
             sb.append(e.colored());
         }
         out.add("§7Đang trang bị: " + (eq.isEmpty() ? "§8(chưa có)" : sb.toString()));
-        out.add("§7Máu tối đa: §f" + Settings.f(val(p, Attribute.GENERIC_MAX_HEALTH)));
-        out.add("§7Sát thương cận chiến: §f" + Settings.f(val(p, Attribute.GENERIC_ATTACK_DAMAGE)));
-        out.add("§7Tốc độ di chuyển: §f" + Settings.f(val(p, Attribute.GENERIC_MOVEMENT_SPEED) * 1000) + "%");
-        out.add("§7Tốc độ đánh: §f" + Settings.f(val(p, Attribute.GENERIC_ATTACK_SPEED)));
-        out.add("§7Giáp: §f" + Settings.f(val(p, Attribute.GENERIC_ARMOR)) + " §8(buff % giáp chỉ có tác dụng khi bạn đang mặc giáp)");
+        out.add("§7Máu tối đa: §f" + Settings.f(val(p, Attrs.MAX_HEALTH)));
+        out.add("§7Sát thương cận chiến: §f" + Settings.f(val(p, Attrs.ATTACK_DAMAGE)));
+        out.add("§7Tốc độ di chuyển: §f" + Settings.f(val(p, Attrs.MOVEMENT_SPEED) * 1000) + "%");
+        out.add("§7Tốc độ đánh: §f" + Settings.f(val(p, Attrs.ATTACK_SPEED)));
+        out.add("§7Giáp: §f" + Settings.f(val(p, Attrs.ARMOR)) + " §8(buff % giáp chỉ có tác dụng khi bạn đang mặc giáp)");
         return out;
     }
 
     public double maxHealth(LivingEntity le) {
-        AttributeInstance a = le.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+        if (Attrs.MAX_HEALTH == null) return 20.0;
+        AttributeInstance a = le.getAttribute(Attrs.MAX_HEALTH);
         return a == null ? 20.0 : a.getValue();
     }
 
@@ -281,51 +339,66 @@ public class ElementManager {
         syncStats(p, equipped.getOrDefault(p.getUniqueId(), Collections.emptyList()));
     }
 
-    private void syncStats(Player p, List<Element> eq) {
-        List<Mod> desired = new ArrayList<>();
-        for (Element e : eq) {
-            addDesired(desired, Attribute.GENERIC_MAX_HEALTH, e, "hp", settings.n(e, "max-health"),
-                    AttributeModifier.Operation.ADD_NUMBER);
-            addDesired(desired, Attribute.GENERIC_ATTACK_DAMAGE, e, "damage", settings.n(e, "damage"),
-                    AttributeModifier.Operation.ADD_NUMBER);
-            addDesired(desired, Attribute.GENERIC_MOVEMENT_SPEED, e, "speed", settings.n(e, "speed-percent") / 100.0,
-                    AttributeModifier.Operation.ADD_SCALAR);
-            addDesired(desired, Attribute.GENERIC_ATTACK_SPEED, e, "attackspeed", settings.n(e, "attack-speed-percent") / 100.0,
-                    AttributeModifier.Operation.ADD_SCALAR);
-            addDesired(desired, Attribute.GENERIC_ARMOR, e, "armor", settings.n(e, "armor-percent") / 100.0,
-                    AttributeModifier.Operation.MULTIPLY_SCALAR_1);
-        }
+    // Giá trị gốc của người chơi trong Minecraft
+    private static final double DEF_HEALTH = 20.0;
+    private static final double DEF_DAMAGE = 1.0;
+    private static final double DEF_SPEED = 0.1;
+    private static final double DEF_ATTACK_SPEED = 4.0;
+    private static final double DEF_ARMOR = 0.0;
 
-        // gỡ modifier cũ không còn đúng, giữ cái còn đúng (tránh mất máu khi đổi trang bị)
-        for (Attribute a : STAT_ATTRIBUTES) {
-            AttributeInstance inst = p.getAttribute(a);
-            if (inst == null) continue;
-            for (AttributeModifier m : new ArrayList<>(inst.getModifiers())) {
-                if (!m.getName().startsWith(MOD_PREFIX)) continue;
-                Mod keep = null;
-                for (Mod d : desired) {
-                    if (d.attr == a && d.name.equals(m.getName()) && d.op == m.getOperation()
-                            && Math.abs(d.amount - m.getAmount()) < 1e-9) {
-                        keep = d;
-                        break;
-                    }
-                }
-                if (keep != null) keep.applied = true;
-                else inst.removeModifier(m);
+    /**
+     * Áp chỉ số bằng cách đặt giá trị gốc (base) của attribute = giá trị mặc định + tổng buff.
+     * Cách này không dùng AttributeModifier nên chạy ổn trên mọi phiên bản Paper/Spigot.
+     * Gọi nhiều lần vẫn an toàn (chỉ ghi khi giá trị thay đổi).
+     */
+    private void syncStats(Player p, List<Element> eq) {
+        try {
+            boolean any = !eq.isEmpty();
+            boolean flagged = p.getPersistentDataContainer().has(statFlagKey, PersistentDataType.BYTE);
+            if (!any && !flagged) return; // chưa từng đụng tới chỉ số của người này
+
+            double hp = 0, dmg = 0, spd = 0, aspd = 0, armor = 0;
+            for (Element e : eq) {
+                hp += settings.n(e, "max-health");
+                dmg += settings.n(e, "damage");
+                spd += settings.n(e, "speed-percent") / 100.0;
+                aspd += settings.n(e, "attack-speed-percent") / 100.0;
+                armor += settings.n(e, "armor-percent") / 100.0;
             }
-        }
-        for (Mod d : desired) {
-            if (d.applied) continue;
-            AttributeInstance inst = p.getAttribute(d.attr);
-            if (inst == null) continue;
-            inst.addModifier(new AttributeModifier(d.id, d.name, d.amount, d.op));
+
+            setBase(p, Attrs.MAX_HEALTH, Math.max(1.0, DEF_HEALTH + hp));
+            setBase(p, Attrs.ATTACK_DAMAGE, Math.max(0.0, DEF_DAMAGE + dmg));
+            setBase(p, Attrs.MOVEMENT_SPEED, Math.max(0.0, DEF_SPEED * (1 + spd)));
+            setBase(p, Attrs.ATTACK_SPEED, Math.max(0.1, DEF_ATTACK_SPEED * (1 + aspd)));
+
+            // giáp: +% của giáp đang mặc (giáp từ đồ = tổng - base hiện tại)
+            if (Attrs.ARMOR != null) {
+                AttributeInstance ai = p.getAttribute(Attrs.ARMOR);
+                if (ai != null) {
+                    double fromGear = Math.max(0.0, ai.getValue() - ai.getBaseValue());
+                    setBase(p, Attrs.ARMOR, DEF_ARMOR + fromGear * armor);
+                }
+            }
+
+            if (any && !flagged) {
+                p.getPersistentDataContainer().set(statFlagKey, PersistentDataType.BYTE, (byte) 1);
+            } else if (!any) {
+                p.getPersistentDataContainer().remove(statFlagKey);
+            }
+        } catch (Throwable t) {
+            if (!warnedStats) {
+                warnedStats = true;
+                plugin.getLogger().warning("Khong ap dung duoc buff chi so (" + Bukkit.getVersion() + "): " + t);
+                t.printStackTrace();
+            }
         }
     }
 
-    private void addDesired(List<Mod> list, Attribute attr, Element e, String stat, double amount,
-                            AttributeModifier.Operation op) {
-        if (amount == 0) return;
-        list.add(new Mod(attr, MOD_PREFIX + e.getId() + ":" + stat, amount, op));
+    private void setBase(Player p, Attribute attr, double value) {
+        if (attr == null) return;
+        AttributeInstance inst = p.getAttribute(attr);
+        if (inst == null) return;
+        if (Math.abs(inst.getBaseValue() - value) > 1e-9) inst.setBaseValue(value);
     }
 
     // ------------------------------------------------------------------
@@ -400,23 +473,35 @@ public class ElementManager {
         boolean refreshStats = statTimer >= 20;
         if (refreshStats) statTimer = 0;
         for (Player p : Bukkit.getOnlinePlayers()) {
-            List<Element> eq = equipped.get(p.getUniqueId());
-            if (eq == null || eq.isEmpty()) continue;
-
-            // mỗi ~1 giây kiểm tra lại buff (rất nhẹ: chỉ so sánh, không đổi nếu đã đúng)
-            if (refreshStats && !p.isDead()) applyStats(p);
-
-            List<Orbit> list = orbits.get(p.getUniqueId());
-            if (!shouldShow(p)) {
-                if (list != null) despawn(p);
-                continue;
+            try {
+                tickPlayer(p, refreshStats);
+            } catch (Throwable t) {
+                if (!warnedGeneral) {
+                    warnedGeneral = true;
+                    plugin.getLogger().warning("Loi khi cap nhat nguyen to (" + Bukkit.getVersion() + "): " + t);
+                    t.printStackTrace();
+                }
             }
-            if (list == null || !isValid(p, list, eq.size())) {
-                rebuild(p);
-                continue;
-            }
-            update(p, list);
         }
+    }
+
+    private void tickPlayer(Player p, boolean refreshStats) {
+        List<Element> eq = equipped.get(p.getUniqueId());
+        if (eq == null || eq.isEmpty()) return;
+
+        // mỗi ~1 giây kiểm tra lại buff (rất nhẹ: chỉ so sánh, không đổi nếu đã đúng)
+        if (refreshStats && !p.isDead()) applyStats(p);
+
+        List<Orbit> list = orbits.get(p.getUniqueId());
+        if (!shouldShow(p)) {
+            if (list != null) despawn(p);
+            return;
+        }
+        if (list == null || !isValid(p, list, eq.size())) {
+            rebuild(p);
+            return;
+        }
+        update(p, list);
     }
 
     public void shutdown() {
@@ -426,8 +511,9 @@ public class ElementManager {
         }
         orbits.clear();
         for (Player p : Bukkit.getOnlinePlayers()) {
-            syncStats(p, Collections.emptyList());
-            if (skillItems != null) skillItems.removeAll(p);
+            if (skillItems != null) safe(() -> skillItems.removeAll(p));
+            p.getPersistentDataContainer().remove(equippedKey);
+            safe(() -> syncStats(p, Collections.emptyList()));
         }
         equipped.clear();
     }

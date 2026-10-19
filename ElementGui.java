@@ -180,7 +180,10 @@ public class ElementGui implements Listener {
             changed = true;
         }
 
-        if (changed) render(top, p);
+        if (changed) {
+            render(top, p);
+            p.updateInventory(); // ép client vẽ lại ngay, không cần thoát ra vào lại
+        }
     }
 
     private void handleElement(Player p, Element el) {

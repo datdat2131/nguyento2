@@ -75,6 +75,22 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
             return true;
         }
 
+        if (sub.equals("reset")) {
+            if (!sender.hasPermission("nguyento.admin")) {
+                sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
+                return true;
+            }
+            Player target = args.length >= 2 ? Bukkit.getPlayerExact(args[1])
+                    : (sender instanceof Player ? (Player) sender : null);
+            if (target == null) {
+                sender.sendMessage("§eDùng: /nguyento reset [người chơi]");
+                return true;
+            }
+            manager.resetPlayer(target);
+            sender.sendMessage("§aĐã đặt lại nguyên tố & chỉ số của " + target.getName() + ".");
+            return true;
+        }
+
         if (sub.equals("reload")) {
             if (!sender.hasPermission("nguyento.admin")) {
                 sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
@@ -146,6 +162,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         if (sender.hasPermission("nguyento.admin")) {
             sender.sendMessage("§e/nguyento give <người chơi> <nguyên tố|all> [số lượng] §7- đưa cuộn giấy");
             sender.sendMessage("§e/nguyento unlock <người chơi> <nguyên tố|all> §7- mở khóa trực tiếp");
+            sender.sendMessage("§e/nguyento reset [người chơi] §7- bỏ trang bị + xóa buff kẹt, chỉ số về mặc định");
             sender.sendMessage("§e/nguyento reload §7- tải lại config.yml");
         }
         return true;
@@ -165,9 +182,10 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             out.add("stats");
-            if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reload"));
+            if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reset", "reload"));
         } else if (sender.hasPermission("nguyento.admin")) {
-            if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock"))) {
+            if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock")
+                    || args[0].equalsIgnoreCase("reset"))) {
                 for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
             } else if (args.length == 3 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock"))) {
                 out.add("all");

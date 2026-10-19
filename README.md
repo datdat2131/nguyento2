@@ -21,9 +21,14 @@ Gỡ nguyên tố thì vật phẩm tự biến mất.
 - /nguyento give <người> <id|all> [n]  : đưa cuộn giấy (admin)
 - /nguyento unlock <người> <id|all>    : mở khóa trực tiếp (admin)
 - /nguyento stats                      : xem chỉ số buff thật đang có
+- /nguyento reset [người]              : bỏ trang bị + xóa buff kẹt (admin)
 - /nguyento reload                     : tải lại config (admin)
 ID: lua, nuoc, dat, gio, set, bang, bong_toi, anh_sang
 
 ## Hiệu năng
 Mục `performance:` trong config.yml: `orbit-update-ticks` (tăng lên 3-4 nếu server yếu), `particles`
 (false = tắt hạt), `particle-density`, `view-range-blocks`. Sửa xong gõ /nguyento reload.
+
+## Thoát game
+Người chơi thoát game sẽ tự động bỏ trang bị toàn bộ nguyên tố (buff reset, vật phẩm kỹ năng bị thu hồi).
+Vào lại phải /nguyento để trang bị lại. Nguyên tố đã sở hữu thì được giữ.

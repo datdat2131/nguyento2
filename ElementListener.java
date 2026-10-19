@@ -23,6 +23,9 @@ public class ElementListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         manager.load(e.getPlayer());
+        if (!manager.getOwned(e.getPlayer()).isEmpty()) {
+            e.getPlayer().sendMessage("§7Nguyên tố đã được đặt lại khi bạn thoát game. Gõ §f/nguyento §7để trang bị lại.");
+        }
     }
 
     @EventHandler
