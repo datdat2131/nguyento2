@@ -20,14 +20,10 @@ Gỡ nguyên tố thì vật phẩm tự biến mất.
 - /nguyento (/nt)                      : mở GUI
 - /nguyento give <người> <id|all> [n]  : đưa cuộn giấy (admin)
 - /nguyento unlock <người> <id|all>    : mở khóa trực tiếp (admin)
+- /nguyento stats                      : xem chỉ số buff thật đang có
 - /nguyento reload                     : tải lại config (admin)
 ID: lua, nuoc, dat, gio, set, bang, bong_toi, anh_sang
 
 ## Hiệu năng
 Mục `performance:` trong config.yml: `orbit-update-ticks` (tăng lên 3-4 nếu server yếu), `particles`
 (false = tắt hạt), `particle-density`, `view-range-blocks`. Sửa xong gõ /nguyento reload.
-
-
-## Bố cục Flat / GitHub Actions
-
-Các file `.java`, `pom.xml`, `plugin.yml`, `config.yml` nằm ở thư mục gốc. Upload toàn bộ nội dung ZIP vào thư mục gốc repository (không upload cả thư mục bọc ngoài). GitHub Actions tự chạy `mvn clean package`; JAR được tạo tại `target/NguyenTo.jar` và xuất hiện trong Artifacts. Yêu cầu Java 17 và Maven.

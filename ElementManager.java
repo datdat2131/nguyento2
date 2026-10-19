@@ -90,6 +90,7 @@ public class ElementManager {
     private final Map<UUID, List<Element>> equipped = new HashMap<>();
     private final Map<UUID, List<Orbit>> orbits = new HashMap<>();
     private long tick = 0;
+    private int statTimer = 0;
     private SkillItems skillItems;
     private final Random rnd = new Random();
     private BukkitTask task;
@@ -233,6 +234,40 @@ public class ElementManager {
         }
     }
 
+    /** Gọi sau khi hồi sinh / đổi thế giới: Minecraft có thể đã xóa buff, áp lại + dựng lại hiển thị. */
+    public void refreshLater(Player p) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!p.isOnline() || !equipped.containsKey(p.getUniqueId())) return;
+            applyStats(p);
+            rebuild(p);
+            syncSkillItem(p);
+        });
+    }
+
+    private double val(Player p, Attribute a) {
+        AttributeInstance inst = p.getAttribute(a);
+        return inst == null ? 0 : inst.getValue();
+    }
+
+    /** Các dòng hiển thị chỉ số thật đang có (dùng cho /nguyento stats). */
+    public List<String> statLines(Player p) {
+        List<String> out = new ArrayList<>();
+        out.add("§6§l✦ Chỉ số hiện tại ✦");
+        List<Element> eq = getEquipped(p);
+        StringBuilder sb = new StringBuilder();
+        for (Element e : eq) {
+            if (sb.length() > 0) sb.append("§7, ");
+            sb.append(e.colored());
+        }
+        out.add("§7Đang trang bị: " + (eq.isEmpty() ? "§8(chưa có)" : sb.toString()));
+        out.add("§7Máu tối đa: §f" + Settings.f(val(p, Attribute.GENERIC_MAX_HEALTH)));
+        out.add("§7Sát thương cận chiến: §f" + Settings.f(val(p, Attribute.GENERIC_ATTACK_DAMAGE)));
+        out.add("§7Tốc độ di chuyển: §f" + Settings.f(val(p, Attribute.GENERIC_MOVEMENT_SPEED) * 1000) + "%");
+        out.add("§7Tốc độ đánh: §f" + Settings.f(val(p, Attribute.GENERIC_ATTACK_SPEED)));
+        out.add("§7Giáp: §f" + Settings.f(val(p, Attribute.GENERIC_ARMOR)) + " §8(buff % giáp chỉ có tác dụng khi bạn đang mặc giáp)");
+        return out;
+    }
+
     public double maxHealth(LivingEntity le) {
         AttributeInstance a = le.getAttribute(Attribute.GENERIC_MAX_HEALTH);
         return a == null ? 20.0 : a.getValue();
@@ -361,9 +396,15 @@ public class ElementManager {
 
     private void tickAll() {
         tick += interval;
+        statTimer += interval;
+        boolean refreshStats = statTimer >= 20;
+        if (refreshStats) statTimer = 0;
         for (Player p : Bukkit.getOnlinePlayers()) {
             List<Element> eq = equipped.get(p.getUniqueId());
             if (eq == null || eq.isEmpty()) continue;
+
+            // mỗi ~1 giây kiểm tra lại buff (rất nhẹ: chỉ so sánh, không đổi nếu đã đúng)
+            if (refreshStats && !p.isDead()) applyStats(p);
 
             List<Orbit> list = orbits.get(p.getUniqueId());
             if (!shouldShow(p)) {

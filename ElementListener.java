@@ -6,8 +6,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 
 public class ElementListener implements Listener {
@@ -26,6 +28,17 @@ public class ElementListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
         manager.unload(e.getPlayer());
+    }
+
+    /** Hồi sinh: Minecraft xóa attribute modifier -> áp lại buff. */
+    @EventHandler
+    public void onRespawn(PlayerRespawnEvent e) {
+        manager.refreshLater(e.getPlayer());
+    }
+
+    @EventHandler
+    public void onWorldChange(PlayerChangedWorldEvent e) {
+        manager.refreshLater(e.getPlayer());
     }
 
     /** Chuột phải cuộn giấy để lĩnh ngộ nguyên tố. */

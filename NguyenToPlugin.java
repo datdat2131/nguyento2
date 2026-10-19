@@ -66,6 +66,15 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
 
         String sub = args[0].toLowerCase(Locale.ROOT);
 
+        if (sub.equals("stats")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Lệnh này chỉ dành cho người chơi.");
+                return true;
+            }
+            for (String line : manager.statLines((Player) sender)) sender.sendMessage(line);
+            return true;
+        }
+
         if (sub.equals("reload")) {
             if (!sender.hasPermission("nguyento.admin")) {
                 sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
@@ -133,6 +142,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         }
 
         sender.sendMessage("§e/nguyento §7- mở menu nguyên tố");
+        sender.sendMessage("§e/nguyento stats §7- xem chỉ số buff thật đang có");
         if (sender.hasPermission("nguyento.admin")) {
             sender.sendMessage("§e/nguyento give <người chơi> <nguyên tố|all> [số lượng] §7- đưa cuộn giấy");
             sender.sendMessage("§e/nguyento unlock <người chơi> <nguyên tố|all> §7- mở khóa trực tiếp");
@@ -154,6 +164,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
     public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
+            out.add("stats");
             if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reload"));
         } else if (sender.hasPermission("nguyento.admin")) {
             if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock"))) {
