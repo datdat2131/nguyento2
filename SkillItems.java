@@ -8,8 +8,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,20 +19,23 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Vật phẩm kỹ năng (bất ly thân): tự được give khi nguyên tố Bóng Tối / Ánh Sáng nằm ở Ô 1,
+ * Vật phẩm kỹ năng (bất ly thân): tự được give khi trang bị nguyên tố có chiêu (Bóng Tối / Ánh Sáng) ở bất kỳ ô nào,
  * tự biến mất khi gỡ nguyên tố. Chuột phải để dùng chiêu.
  */
 public class SkillItems {
 
     private final NguyenToPlugin plugin;
     private final ElementManager manager;
+    private final Settings settings;
+    private BukkitTask task;
     private final NamespacedKey itemKey;
     private final NamespacedKey ownerKey;
     private final Set<UUID> warned = new HashSet<>();
 
-    public SkillItems(NguyenToPlugin plugin, ElementManager manager) {
+    public SkillItems(NguyenToPlugin plugin, ElementManager manager, Settings settings) {
         this.plugin = plugin;
         this.manager = manager;
+        this.settings = settings;
         this.itemKey = new NamespacedKey(plugin, "skillitem");
         this.ownerKey = new NamespacedKey(plugin, "skillowner");
     }
@@ -48,7 +53,7 @@ public class SkillItems {
         lore.add("§8Vật phẩm kỹ năng");
         lore.add("");
         lore.add("§7Nhấn §fchuột phải §7để thi triển chiêu");
-        lore.add("§7của nguyên tố " + e.colored() + " §7ở Ô số 1.");
+        lore.add("§7của nguyên tố " + e.colored() + "§7.");
         lore.add("");
         lore.add("§cBất ly thân §7- thuộc về §f" + owner.getName());
         lore.add("§8Không thể vứt, cất vào rương hay trao đổi.");
@@ -79,19 +84,25 @@ public class SkillItems {
         return p.getUniqueId().toString().equals(s);
     }
 
-    /** Đồng bộ: đảm bảo người chơi có đúng 1 vật phẩm kỹ năng (hoặc không có nếu Ô 1 không có chiêu). */
+    /**
+     * Đồng bộ: mỗi nguyên tố có chiêu (Bóng Tối, Ánh Sáng) đang trang bị ở BẤT KỲ ô nào
+     * ứng với đúng 1 vật phẩm kỹ năng. Gỡ nguyên tố thì vật phẩm bị thu hồi.
+     */
     public void sync(Player p) {
-        List<Element> eq = manager.getEquipped(p);
-        Element want = (!eq.isEmpty() && eq.get(0).isSpecial()) ? eq.get(0) : null;
-        boolean found = false;
+        Set<Element> want = EnumSet.noneOf(Element.class);
+        for (Element e : manager.getEquipped(p)) {
+            if (e.isSpecial()) want.add(e);
+        }
+        Set<Element> found = EnumSet.noneOf(Element.class);
 
         PlayerInventory inv = p.getInventory();
         ItemStack[] contents = inv.getContents();
         for (int i = 0; i < contents.length; i++) {
             ItemStack it = contents[i];
             if (!isBound(it)) continue;
-            if (want != null && !found && elementOf(it) == want && isOwner(it, p)) {
-                found = true;
+            Element el = elementOf(it);
+            if (el != null && want.contains(el) && !found.contains(el) && isOwner(it, p)) {
+                found.add(el);
             } else {
                 inv.setItem(i, null);
             }
@@ -99,24 +110,27 @@ public class SkillItems {
 
         ItemStack cursor = p.getItemOnCursor();
         if (isBound(cursor)) {
-            if (want != null && !found && elementOf(cursor) == want && isOwner(cursor, p)) found = true;
+            Element el = elementOf(cursor);
+            if (el != null && want.contains(el) && !found.contains(el) && isOwner(cursor, p)) found.add(el);
             else p.setItemOnCursor(null);
         }
 
         UUID id = p.getUniqueId();
-        if (want == null) {
-            warned.remove(id);
-            return;
-        }
-        if (!found) {
-            Map<Integer, ItemStack> left = inv.addItem(create(p, want));
+        boolean full = false;
+        for (Element el : want) {
+            if (found.contains(el)) continue;
+            Map<Integer, ItemStack> left = inv.addItem(create(p, el));
             if (left.isEmpty()) {
-                warned.remove(id);
-                p.sendMessage("§aBạn nhận được vật phẩm kỹ năng của " + want.colored()
+                p.sendMessage("§aBạn nhận được vật phẩm kỹ năng của " + el.colored()
                         + "§a. §7Nhấn §fchuột phải §7để dùng chiêu.");
-            } else if (warned.add(id)) {
-                p.sendMessage("§cTúi đồ đầy! Hãy chừa 1 ô trống để nhận vật phẩm kỹ năng.");
+            } else {
+                full = true;
             }
+        }
+        if (full) {
+            if (warned.add(id)) p.sendMessage("§cTúi đồ đầy! Hãy chừa ô trống để nhận vật phẩm kỹ năng.");
+        } else {
+            warned.remove(id);
         }
     }
 
@@ -130,10 +144,14 @@ public class SkillItems {
         warned.remove(p.getUniqueId());
     }
 
-    /** Mỗi giây kiểm tra lại (phòng trường hợp mất/trùng vật phẩm, túi đầy lúc trước...). */
+    /** Định kỳ kiểm tra lại (chỉ với người đang có nguyên tố có chiêu) phòng mất/trùng vật phẩm, túi đầy lúc trước... */
     public void startTask() {
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            for (Player p : Bukkit.getOnlinePlayers()) sync(p);
-        }, 20L, 20L);
+        if (task != null) task.cancel();
+        long period = (long) Math.max(1, settings.perf("skill-item-check-seconds")) * 20L;
+        task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (manager.hasSpecial(p)) sync(p);
+            }
+        }, period, period);
     }
 }

@@ -53,8 +53,8 @@ public class SkillItemListener implements Listener {
             p.sendMessage("§cVật phẩm này không thuộc về bạn.");
             return;
         }
-        if (!skills.tryCast(p)) {
-            items.sync(p); // Ô 1 không còn chiêu -> thu hồi vật phẩm
+        if (!skills.tryCast(p, items.elementOf(item))) {
+            items.sync(p); // nguyên tố đã bị gỡ -> thu hồi vật phẩm
         }
     }
 

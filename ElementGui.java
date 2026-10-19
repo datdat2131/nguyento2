@@ -89,8 +89,9 @@ public class ElementGui implements Listener {
                 "§7• Click nguyên tố để bật / tắt",
                 "§7• Nhận nguyên tố bằng cuộn giấy",
                 "",
-                "§cChiêu thức §7chỉ dùng được khi nguyên tố",
-                "§7nằm ở §fÔ 1§7. Bạn sẽ nhận một vật phẩm kỹ năng,",
+                "§7Mọi buff & nội tại hoạt động ở §fmọi ô§7.",
+                "§cChiêu thức §7(Bóng Tối, Ánh Sáng): trang bị",
+                "§7ở ô nào cũng được, bạn sẽ nhận vật phẩm kỹ năng,",
                 "§7§fchuột phải §7vật phẩm đó để dùng chiêu.",
                 "§8(Vật phẩm bất ly thân, không vứt/cất được)"), false));
 
@@ -202,8 +203,8 @@ public class ElementGui implements Listener {
         } else if (r == ElementManager.EquipResult.OK) {
             int slot = manager.getEquipped(p).indexOf(el);
             p.sendMessage("§aĐã trang bị nguyên tố " + el.colored() + " §7(" + SLOT_NAMES[slot] + ")§a.");
-            if (slot == 0 && el.isSpecial()) {
-                p.sendMessage("§7Ở Ô 1: bạn nhận vật phẩm kỹ năng, §fchuột phải §7để dùng chiêu.");
+            if (el.isSpecial()) {
+                p.sendMessage("§7Bạn nhận vật phẩm kỹ năng, §fchuột phải §7để dùng chiêu.");
             }
             p.playSound(p.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.6f, 1.6f);
         }

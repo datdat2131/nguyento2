@@ -6,6 +6,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.attribute.AttributeModifier;
@@ -18,6 +19,7 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -28,6 +30,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -50,7 +53,10 @@ public class ElementManager {
     private static class Orbit {
         final Element element;
         final ItemDisplay display;
-        Quaternionf last = new Quaternionf();
+        Location lastSent;
+        long nextKey = 0;
+        long nextParticle = 0;
+        long nextDust = 0;
 
         Orbit(Element element, ItemDisplay display) {
             this.element = element;
@@ -85,6 +91,12 @@ public class ElementManager {
     private final Map<UUID, List<Orbit>> orbits = new HashMap<>();
     private long tick = 0;
     private SkillItems skillItems;
+    private final Random rnd = new Random();
+    private BukkitTask task;
+    private int interval = 2;
+    private boolean particlesOn = true;
+    private double density = 0.6;
+    private float viewRange = 0.5f;
 
     public ElementManager(NguyenToPlugin plugin, Settings settings) {
         this.plugin = plugin;
@@ -139,6 +151,16 @@ public class ElementManager {
 
     public List<Element> getEquipped(Player p) {
         return new ArrayList<>(equipped.getOrDefault(p.getUniqueId(), Collections.emptyList()));
+    }
+
+    /** Người chơi có đang trang bị nguyên tố có chiêu (Bóng Tối / Ánh Sáng) không. */
+    public boolean hasSpecial(Player p) {
+        List<Element> l = equipped.get(p.getUniqueId());
+        if (l == null) return false;
+        for (Element e : l) {
+            if (e.isSpecial()) return true;
+        }
+        return false;
     }
 
     public boolean has(Player p, Element e) {
@@ -204,7 +226,10 @@ public class ElementManager {
     /** Gọi sau khi /nguyento reload để áp lại chỉ số mới. */
     public void reloadStats() {
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (equipped.containsKey(p.getUniqueId())) applyStats(p);
+            if (equipped.containsKey(p.getUniqueId())) {
+                applyStats(p);
+                rebuild(p);
+            }
         }
     }
 
@@ -319,28 +344,42 @@ public class ElementManager {
     //  Hiển thị nguyên tố bay quanh người
     // ------------------------------------------------------------------
 
-    public void startTask() {
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            tick += 2;
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                List<Element> eq = equipped.get(p.getUniqueId());
-                if (eq == null || eq.isEmpty()) continue;
+    /**
+     * Số tick giữa 2 mốc xoay / nhấp nhô. Client tự nội suy mượt giữa 2 mốc nên
+     * không cần gửi gói tin mỗi tick (giảm lag rõ rệt so với cập nhật liên tục).
+     */
+    private static final int KEY_STEP = 10;
 
-                List<Orbit> list = orbits.get(p.getUniqueId());
-                if (!shouldShow(p)) {
-                    if (list != null) despawn(p);
-                    continue;
-                }
-                if (list == null || !isValid(p, list, eq.size())) {
-                    rebuild(p);
-                    continue;
-                }
-                update(p, list);
+    public void startTask() {
+        if (task != null) task.cancel();
+        interval = (int) Math.max(1, Math.min(10, settings.perf("orbit-update-ticks")));
+        particlesOn = settings.pb("particles");
+        density = Math.max(0.0, Math.min(2.0, settings.perf("particle-density")));
+        viewRange = (float) (Math.max(8.0, settings.perf("view-range-blocks")) / 64.0);
+        task = Bukkit.getScheduler().runTaskTimer(plugin, this::tickAll, 1L, interval);
+    }
+
+    private void tickAll() {
+        tick += interval;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            List<Element> eq = equipped.get(p.getUniqueId());
+            if (eq == null || eq.isEmpty()) continue;
+
+            List<Orbit> list = orbits.get(p.getUniqueId());
+            if (!shouldShow(p)) {
+                if (list != null) despawn(p);
+                continue;
             }
-        }, 1L, 2L);
+            if (list == null || !isValid(p, list, eq.size())) {
+                rebuild(p);
+                continue;
+            }
+            update(p, list);
+        }
     }
 
     public void shutdown() {
+        if (task != null) task.cancel();
         for (List<Orbit> list : orbits.values()) {
             for (Orbit o : list) o.display.remove();
         }
@@ -360,10 +399,11 @@ public class ElementManager {
 
     private boolean isValid(Player p, List<Orbit> list, int expected) {
         if (list.size() != expected) return false;
+        Location pl = p.getLocation();
         for (Orbit o : list) {
             if (!o.display.isValid()) return false;
-            if (o.display.getWorld() != p.getWorld()) return false;
-            if (o.display.getLocation().distanceSquared(p.getLocation()) > 64) return false;
+            Location last = o.lastSent;
+            if (last == null || last.getWorld() != pl.getWorld() || last.distanceSquared(pl) > 144) return false;
         }
         return true;
     }
@@ -373,19 +413,24 @@ public class ElementManager {
         List<Element> eq = equipped.get(p.getUniqueId());
         if (eq == null || eq.isEmpty() || !shouldShow(p)) return;
 
+        Location pl = p.getLocation();
+        double height = p.getHeight();
         List<Orbit> list = new ArrayList<>();
         for (int i = 0; i < eq.size(); i++) {
             Element el = eq.get(i);
-            ItemDisplay d = p.getWorld().spawn(anchor(p, i), ItemDisplay.class);
+            Location at = anchor(pl, height, i);
+            ItemDisplay d = pl.getWorld().spawn(at, ItemDisplay.class);
             d.setItemStack(displayItem(el));
             d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
             d.setPersistent(false);
             d.setGravity(false);
             d.setBrightness(new Display.Brightness(15, 15));
-            d.setTeleportDuration(2);
-            d.setInterpolationDuration(2);
+            d.setViewRange(viewRange);
+            d.setTeleportDuration(interval);
+            d.setTransformation(transform(i, el, tick));
             Orbit o = new Orbit(el, d);
-            d.setTransformation(transform(p, i, o));
+            o.lastSent = at;
+            o.nextKey = tick;
             list.add(o);
         }
         orbits.put(p.getUniqueId(), list);
@@ -398,64 +443,99 @@ public class ElementManager {
     }
 
     private void update(Player p, List<Orbit> list) {
+        Location pl = p.getLocation();
+        double height = p.getHeight();
         for (int i = 0; i < list.size(); i++) {
             Orbit o = list.get(i);
-            Location loc = anchor(p, i);
-            o.display.setInterpolationDelay(0);
-            o.display.setTransformation(transform(p, i, o));
-            o.display.teleport(loc);
+            Location target = anchor(pl, height, i);
 
-            Element el = o.element;
-            if (el.isSpecial()) {
-                loc.getWorld().spawnParticle(el.getParticle(), loc, 3, 0.2, 0.2, 0.2, 0.02);
-                if (tick % 6 == 0) {
-                    Color c = el == Element.ANH_SANG ? Color.fromRGB(255, 215, 0) : Color.fromRGB(110, 0, 170);
-                    Fx.dust(loc.getWorld(), loc, 4, 0.25, c, 1.2f);
-                }
-            } else if (tick % 4 == 0) {
-                loc.getWorld().spawnParticle(el.getParticle(), loc, 2, 0.15, 0.15, 0.15, 0.01);
+            // mốc xoay + nhấp nhô kế tiếp (client tự nội suy giữa các mốc)
+            if (tick + interval >= o.nextKey) {
+                long when = tick + KEY_STEP;
+                o.display.setInterpolationDuration(KEY_STEP);
+                o.display.setInterpolationDelay(0);
+                o.display.setTransformation(transform(i, o.element, when));
+                o.nextKey = when;
+            }
+
+            // chỉ gửi vị trí khi người chơi thực sự di chuyển / quay đầu
+            Location last = o.lastSent;
+            if (last == null || last.getWorld() != target.getWorld()
+                    || last.distanceSquared(target) > 0.0004
+                    || Math.abs(yawDiff(target.getYaw(), last.getYaw())) > 1.5f) {
+                o.display.teleport(target);
+                o.lastSent = target;
+            }
+
+            particles(o, target);
+        }
+    }
+
+    private static float yawDiff(float a, float b) {
+        float d = (a - b) % 360f;
+        if (d > 180f) d -= 360f;
+        if (d < -180f) d += 360f;
+        return d;
+    }
+
+    private int scaled(double base) {
+        double v = base * density;
+        int n = (int) v;
+        if (rnd.nextDouble() < v - n) n++;
+        return n;
+    }
+
+    private void particles(Orbit o, Location loc) {
+        if (!particlesOn || density <= 0) return;
+        World w = loc.getWorld();
+        Element el = o.element;
+
+        if (tick >= o.nextParticle) {
+            o.nextParticle = tick + (el.isSpecial() ? 4 : 6);
+            int n = scaled(el.isSpecial() ? 2 : 1);
+            if (n > 0) w.spawnParticle(el.getParticle(), loc, n, 0.15, 0.15, 0.15, 0.01);
+        }
+        if (el.isSpecial() && tick >= o.nextDust) {
+            o.nextDust = tick + 12;
+            int n = scaled(3);
+            if (n > 0) {
+                Color c = el == Element.ANH_SANG ? Color.fromRGB(255, 215, 0) : Color.fromRGB(110, 0, 170);
+                Fx.dust(w, loc, n, 0.25, c, 1.2f);
             }
         }
     }
 
-    /** Vị trí của từng ô: 0 = trên đầu, 1 = vai trái, 2 = vai phải. */
-    private Location anchor(Player p, int slot) {
-        Location l = p.getLocation();
-        double yaw = Math.toRadians(l.getYaw());
-        double height = p.getHeight();
-        double bob = Math.sin((tick + slot * 13) * 0.12) * 0.07;
-
+    /** Vị trí của từng ô: 0 = trên đầu, 1 = vai trái, 2 = vai phải (yaw = hướng người chơi). */
+    private Location anchor(Location pl, double height, int slot) {
+        double yaw = Math.toRadians(pl.getYaw());
         double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
         double fx = -Math.sin(yaw), fz = Math.cos(yaw);
 
         double side, y, back;
         if (slot == 0) {
             side = 0;
-            y = height + 0.45 + bob;
+            y = height + 0.5;
             back = 0;
         } else {
             side = (slot == 1 ? -1 : 1) * 0.85;
-            y = height * 0.8 + 0.15 + bob;
+            y = height * 0.8 + 0.15;
             back = -0.2;
         }
-        return new Location(l.getWorld(),
-                l.getX() + rx * side + fx * back,
-                l.getY() + y,
-                l.getZ() + rz * side + fz * back);
+        return new Location(pl.getWorld(),
+                pl.getX() + rx * side + fx * back,
+                pl.getY() + y,
+                pl.getZ() + rz * side + fz * back,
+                pl.getYaw(), 0f);
     }
 
-    /** Xoay tròn + nghiêng ra ngoài ở hai bên vai cho ngầu. */
-    private Transformation transform(Player p, int slot, Orbit o) {
-        float spin = (float) (tick * 0.1 + slot * 1.7);
+    /** Xoay tròn + nghiêng ra ngoài ở hai bên vai + nhấp nhô nhẹ. 'when' = tick của mốc đích. */
+    private Transformation transform(int slot, Element el, long when) {
+        float spin = (float) (when * 0.1 + slot * 1.7);
         float tilt = slot == 0 ? 0f : (slot == 1 ? -0.45f : 0.45f);
-        float yaw = (float) Math.toRadians(p.getLocation().getYaw());
-
-        Quaternionf q = new Quaternionf().rotateY(-yaw).rotateZ(tilt).rotateX(slot == 0 ? 0f : 0.3f).rotateY(spin);
-        if (q.dot(o.last) < 0) q.set(-q.x, -q.y, -q.z, -q.w);
-        o.last = new Quaternionf(q);
-
+        Quaternionf q = new Quaternionf().rotateZ(tilt).rotateX(slot == 0 ? 0f : 0.3f).rotateY(spin);
+        float bob = (float) (Math.sin((when + slot * 13) * 0.12) * 0.07);
         float s = slot == 0 ? 0.9f : 0.75f;
-        if (o.element.isSpecial()) s *= 1.25f;
-        return new Transformation(new Vector3f(), q, new Vector3f(s, s, s), new Quaternionf());
+        if (el.isSpecial()) s *= 1.25f;
+        return new Transformation(new Vector3f(0f, bob, 0f), q, new Vector3f(s, s, s), new Quaternionf());
     }
 }

@@ -111,6 +111,14 @@ public class SkillManager {
                 .put(key, System.currentTimeMillis() + (long) (seconds * 1000));
     }
 
+    private double dens() {
+        return Math.max(0.2, Math.min(1.0, settings.perf("particle-density")));
+    }
+
+    private int ringPoints(double r) {
+        return Math.max(12, (int) (r * 3 * dens()));
+    }
+
     private boolean checkReady(Player p, String key) {
         long r = remainingMs(p, key);
         if (r > 0) {
@@ -127,13 +135,13 @@ public class SkillManager {
 
     public void startTask() {
         Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            hudCounter += 2;
+            hudCounter += 4;
             boolean hud = settings.gb("show-skill-hud") && hudCounter % 20 == 0;
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (manager.has(p, Element.ANH_SANG)) tickShield(p);
                 if (hud) hud(p);
             }
-        }, 2L, 2L);
+        }, 4L, 4L);
     }
 
     public void shutdown() {
@@ -144,33 +152,37 @@ public class SkillManager {
     }
 
     private void hud(Player p) {
-        List<Element> eq = manager.getEquipped(p);
-        if (eq.isEmpty()) return;
-        Element first = eq.get(0);
-        if (first == Element.BONG_TOI) showHud(p, "§5✦ Lãnh Địa Bóng Tối", CD_DOMAIN);
-        else if (first == Element.ANH_SANG) showHud(p, "§6✦ Thần Phạt", CD_DIVINE);
+        if (!manager.hasSpecial(p)) return;
+        StringBuilder sb = new StringBuilder();
+        for (Element e : manager.getEquipped(p)) {
+            String part = null;
+            if (e == Element.BONG_TOI) part = hudPart(p, "§5✦ Lãnh Địa", CD_DOMAIN);
+            else if (e == Element.ANH_SANG) part = hudPart(p, "§6✦ Thần Phạt", CD_DIVINE);
+            if (part == null) continue;
+            if (sb.length() > 0) sb.append("  §8|  ");
+            sb.append(part);
+        }
+        if (sb.length() > 0) Fx.actionBar(p, sb.toString());
     }
 
-    private void showHud(Player p, String name, String key) {
+    private String hudPart(Player p, String name, String key) {
         long r = remainingMs(p, key);
-        String state = r > 0 ? "§c" + (r / 1000 + 1) + "s" : "§aSẵn sàng §7(chuột phải ấn kỹ năng)";
-        Fx.actionBar(p, name + " §8» " + state);
+        String state = r > 0 ? "§c" + (r / 1000 + 1) + "s" : "§aSẵn sàng";
+        return name + " §8» " + state;
     }
 
     // ------------------------------------------------------------------
-    //  Dùng chiêu (Ô 1 + phím G)
+    //  Dùng chiêu (chuột phải vật phẩm kỹ năng, nguyên tố ở ô nào cũng được)
     // ------------------------------------------------------------------
 
-    /** @return true nếu người chơi đang có chiêu ở Ô 1 (kể cả khi đang hồi chiêu). */
-    public boolean tryCast(Player p) {
-        List<Element> eq = manager.getEquipped(p);
-        if (eq.isEmpty() || p.isDead()) return false;
-        Element first = eq.get(0);
-        if (first == Element.BONG_TOI) {
+    /** @return true nếu người chơi đang trang bị nguyên tố đó và nó có chiêu (kể cả khi đang hồi chiêu). */
+    public boolean tryCast(Player p, Element e) {
+        if (e == null || p.isDead() || !manager.has(p, e)) return false;
+        if (e == Element.BONG_TOI) {
             castDomain(p);
             return true;
         }
-        if (first == Element.ANH_SANG) {
+        if (e == Element.ANH_SANG) {
             castDivine(p);
             return true;
         }
@@ -235,21 +247,25 @@ public class SkillManager {
         double cx = d.center.getX(), cy = d.center.getY(), cz = d.center.getZ();
         double r = d.radius;
 
-        // --- hiệu ứng hình ảnh ---
-        int pts = Math.max(24, (int) (r * 6));
-        double rot = ticks * 0.03;
-        for (int i = 0; i < pts; i++) {
-            double a = 2 * Math.PI * i / pts + rot;
-            double x = cx + Math.cos(a) * r;
-            double z = cz + Math.sin(a) * r;
-            w.spawnParticle(Particle.SOUL_FIRE_FLAME, x, cy + 0.15, z, 1, 0, 0, 0, 0);
-            if (i % 4 == 0) w.spawnParticle(Particle.PORTAL, x, cy + 1.0, z, 4, 0.1, 0.8, 0.1, 0.1);
-        }
-        for (int i = 0; i < 18; i++) {
-            double a = rnd.nextDouble() * 2 * Math.PI;
-            double rr = Math.sqrt(rnd.nextDouble()) * r;
-            w.spawnParticle(Particle.SQUID_INK, cx + Math.cos(a) * rr, cy + 0.1, cz + Math.sin(a) * rr,
-                    1, 0, 0.02, 0, 0.01);
+        // --- hiệu ứng hình ảnh (số lần gọi hạt được giảm để tránh lag) ---
+        if (settings.pb("particles")) {
+            double dens = dens();
+            int pts = ringPoints(r);
+            double rot = ticks * 0.03;
+            for (int i = 0; i < pts; i++) {
+                double a = 2 * Math.PI * i / pts + rot;
+                double x = cx + Math.cos(a) * r;
+                double z = cz + Math.sin(a) * r;
+                w.spawnParticle(Particle.SOUL_FIRE_FLAME, x, cy + 0.15, z, 1, 0, 0, 0, 0);
+                if (i % 6 == 0) w.spawnParticle(Particle.PORTAL, x, cy + 1.0, z, 4, 0.1, 0.8, 0.1, 0.1);
+            }
+            int fill = Math.max(4, (int) (8 * dens));
+            for (int i = 0; i < fill; i++) {
+                double a = rnd.nextDouble() * 2 * Math.PI;
+                double rr = Math.sqrt(rnd.nextDouble()) * r;
+                w.spawnParticle(Particle.SQUID_INK, cx + Math.cos(a) * rr, cy + 0.1, cz + Math.sin(a) * rr,
+                        1, 0, 0.02, 0, 0.01);
+            }
         }
 
         // --- hiệu ứng lên người ---
@@ -300,11 +316,13 @@ public class SkillManager {
 
             @Override
             public void run() {
-                // vòng báo trước + vòng thu hẹp vào tâm
-                ring(w, c, radius, Math.max(32, (int) (radius * 6)), 0.15, Particle.END_ROD);
-                double shrink = radius * (1.0 - (double) t / delay);
-                ring(w, c, shrink, Math.max(24, (int) (shrink * 6)), 0.3, Particle.END_ROD);
-                Fx.dust(w, c.clone().add(0, 0.2, 0), 6, radius / 2, Color.fromRGB(255, 215, 0), 1.4f);
+                // vòng báo trước + vòng thu hẹp vào tâm (4 tick một lần cho nhẹ)
+                if (settings.pb("particles") && t % 4 == 0) {
+                    ring(w, c, radius, ringPoints(radius), 0.15, Particle.END_ROD);
+                    double shrink = radius * (1.0 - (double) t / delay);
+                    ring(w, c, shrink, ringPoints(shrink), 0.3, Particle.END_ROD);
+                    Fx.dust(w, c.clone().add(0, 0.2, 0), 6, radius / 2, Color.fromRGB(255, 215, 0), 1.4f);
+                }
 
                 if (t >= delay) {
                     cancel();
@@ -333,24 +351,26 @@ public class SkillManager {
         // cột hào quang
         spawnPillar(w, c, 3.2f, 60f, Material.YELLOW_STAINED_GLASS);
         spawnPillar(w, c, 0.8f, 60f, Material.WHITE_CONCRETE);
-        for (int y = 0; y < 45; y += 1) {
-            w.spawnParticle(Particle.END_ROD, c.getX(), c.getY() + y, c.getZ(), 3, 0.3, 0.2, 0.3, 0.02);
-        }
-
-        // sóng xung kích lan ra
-        new BukkitRunnable() {
-            int t = 0;
-
-            @Override
-            public void run() {
-                t++;
-                double r = radius * t / 10.0;
-                int pts = Math.max(24, (int) (r * 10));
-                ring(w, c, r, pts, 0.2, Particle.END_ROD);
-                ring(w, c, r, pts, 1.2, Particle.END_ROD);
-                if (t >= 10) cancel();
+        if (settings.pb("particles")) {
+            for (int y = 0; y < 45; y += 2) {
+                w.spawnParticle(Particle.END_ROD, c.getX(), c.getY() + y, c.getZ(), 4, 0.3, 0.4, 0.3, 0.02);
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+
+            // sóng xung kích lan ra (5 bước, mỗi bước 2 tick)
+            new BukkitRunnable() {
+                int t = 0;
+
+                @Override
+                public void run() {
+                    t++;
+                    double r = radius * t / 5.0;
+                    int pts = ringPoints(r);
+                    ring(w, c, r, pts, 0.2, Particle.END_ROD);
+                    ring(w, c, r, pts, 1.2, Particle.END_ROD);
+                    if (t >= 5) cancel();
+                }
+            }.runTaskTimer(plugin, 0L, 2L);
+        }
 
         // gây sát thương
         for (Entity ent : w.getNearbyEntities(c, radius, radius, radius)) {

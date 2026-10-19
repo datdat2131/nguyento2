@@ -12,6 +12,16 @@ general:
   skills-hit-mobs: true      # chiêu thức có ảnh hưởng quái/động vật không
   show-skill-hud: true       # hiện trạng thái hồi chiêu trên thanh action bar
 
+# ----------------------------------------------------------------------
+#  HIỆU NĂNG - chỉnh ở đây nếu bị giật / lag
+# ----------------------------------------------------------------------
+performance:
+  orbit-update-ticks: 2        # nguyên tố cập nhật vị trí mỗi N tick (1-10). Server yếu/đông người: đặt 3-4
+  particles: true              # false = tắt toàn bộ hạt hiệu ứng (nguyên tố bay + chiêu thức)
+  particle-density: 0.6        # mật độ hạt 0.0 - 1.0 (thấp = nhẹ hơn)
+  view-range-blocks: 32        # khoảng cách tối đa còn nhìn thấy nguyên tố (block)
+  skill-item-check-seconds: 2  # bao lâu kiểm tra lại vật phẩm kỹ năng
+
 elements:
 
   # ---------------- LỬA ----------------
@@ -63,7 +73,7 @@ elements:
     lifesteal-percent: 10    # % sát thương gây ra hồi lại thành máu
     dark-chance: 15          # % đòn đánh có thêm sát thương bóng tối
     dark-bonus-percent: 30   # +% sát thương khi nội tại kích hoạt
-    # Chiêu: trang bị Ô 1, nhận vật phẩm kỹ năng và chuột phải để dùng
+    # Chiêu: trang bị ở ô nào cũng được, nhận vật phẩm kỹ năng và chuột phải để dùng
     skill:
       cooldown: 120          # hồi chiêu (giây)
       duration: 10           # thời gian lãnh địa (giây)
@@ -86,7 +96,7 @@ elements:
       shield-percent: 30             # lá chắn = % máu tối đa
       cooldown: 30                   # hồi (giây)
       duration-seconds: 15           # lá chắn tồn tại tối đa (giây)
-    # Chiêu cuối Thần Phạt: trang bị Ô 1, nhận vật phẩm kỹ năng và chuột phải để dùng
+    # Chiêu cuối Thần Phạt: trang bị ở ô nào cũng được, nhận vật phẩm kỹ năng và chuột phải để dùng
     skill:
       cooldown: 120
       radius: 10

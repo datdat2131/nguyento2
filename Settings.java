@@ -27,6 +27,14 @@ public class Settings {
         return n(e, key) / 100.0;
     }
 
+    public double perf(String key) {
+        return plugin.getConfig().getDouble("performance." + key);
+    }
+
+    public boolean pb(String key) {
+        return plugin.getConfig().getBoolean("performance." + key);
+    }
+
     public boolean gb(String key) {
         return plugin.getConfig().getBoolean("general." + key);
     }
@@ -91,7 +99,7 @@ public class Settings {
                 stat(buffs, e, "lifesteal-percent", "{v}% sát thương gây ra hồi thành máu");
                 if (n(e, "dark-chance") > 0)
                     passives.add(f(n(e, "dark-chance")) + "% đòn đánh gây thêm " + f(n(e, "dark-bonus-percent")) + "% sát thương bóng tối");
-                skills.add("Lãnh Địa Bóng Tối: trang bị ở Ô 1, chuột phải vật phẩm kỹ năng");
+                skills.add("Lãnh Địa Bóng Tối: chuột phải vật phẩm kỹ năng (trang bị ở ô nào cũng được)");
                 skills.add("Tạo vùng bóng tối " + f(n(e, "skill.duration")) + "s, bán kính " + f(n(e, "skill.radius"))
                         + " block. Bản thân tăng tốc, +" + f(n(e, "skill.owner-bonus-damage")) + " sát thương, +"
                         + f(n(e, "skill.owner-extra-lifesteal-percent")) + "% hút máu. Kẻ địch bên trong bị chậm"
@@ -104,7 +112,7 @@ public class Settings {
                 passives.add("Nội tại ẩn: khi máu dưới " + f(n(e, "shield.health-threshold-percent"))
                         + "% tạo lá chắn máu vàng bằng " + f(n(e, "shield.shield-percent"))
                         + "% máu tối đa (hồi " + f(n(e, "shield.cooldown")) + "s)");
-                skills.add("Thần Phạt: trang bị ở Ô 1, chuột phải vật phẩm kỹ năng");
+                skills.add("Thần Phạt: chuột phải vật phẩm kỹ năng (trang bị ở ô nào cũng được)");
                 skills.add("Tạo cột hào quang phạm vi " + f(n(e, "skill.radius")) + " block, gây "
                         + f(n(e, "skill.damage")) + " sát thương");
                 skills.add("Hồi chiêu " + f(n(e, "skill.cooldown")) + "s");

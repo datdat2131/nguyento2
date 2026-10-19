@@ -28,7 +28,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         manager = new ElementManager(this, settings);
         skills = new SkillManager(this, manager, settings);
         gui = new ElementGui(manager, settings);
-        items = new SkillItems(this, manager);
+        items = new SkillItems(this, manager, settings);
         manager.setSkillItems(items);
 
         Bukkit.getPluginManager().registerEvents(gui, this);
@@ -72,6 +72,8 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
                 return true;
             }
             settings.reload();
+            manager.startTask();
+            items.startTask();
             manager.reloadStats();
             sender.sendMessage("§aĐã tải lại config.yml! Buff mới đã được áp dụng.");
             return true;

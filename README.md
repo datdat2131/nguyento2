@@ -10,10 +10,11 @@ Mọi buff / nội tại / chiêu chỉnh trong `plugins/NguyenTo/config.yml`, s
 Mô tả dưới mỗi nguyên tố trong GUI tự cập nhật theo config.
 
 ## Dùng chiêu (vật phẩm kỹ năng)
-Khi Bóng Tối / Ánh Sáng nằm ở Ô số 1, người chơi tự nhận 1 vật phẩm kỹ năng.
-Chuột phải vật phẩm để dùng chiêu. Vật phẩm bất ly thân: không vứt được, không cất vào
-rương/ender chest/bàn chế tạo/bundle/khung vật phẩm, người khác không nhặt hay dùng được,
-chết không rơi ra. Gỡ nguyên tố khỏi Ô 1 thì vật phẩm tự biến mất.
+Mọi buff / nội tại hoạt động ở cả 3 ô. Bóng Tối / Ánh Sáng trang bị ở ô nào cũng được
+nhận 1 vật phẩm kỹ năng (trang bị cả hai thì nhận hai vật phẩm). Chuột phải để dùng chiêu.
+Vật phẩm bất ly thân: không vứt được, không cất vào rương/ender chest/bàn chế tạo/bundle/
+khung vật phẩm, người khác không nhặt hay dùng được, chết không rơi ra.
+Gỡ nguyên tố thì vật phẩm tự biến mất.
 
 ## Lệnh
 - /nguyento (/nt)                      : mở GUI
@@ -21,3 +22,12 @@ chết không rơi ra. Gỡ nguyên tố khỏi Ô 1 thì vật phẩm tự bi�
 - /nguyento unlock <người> <id|all>    : mở khóa trực tiếp (admin)
 - /nguyento reload                     : tải lại config (admin)
 ID: lua, nuoc, dat, gio, set, bang, bong_toi, anh_sang
+
+## Hiệu năng
+Mục `performance:` trong config.yml: `orbit-update-ticks` (tăng lên 3-4 nếu server yếu), `particles`
+(false = tắt hạt), `particle-density`, `view-range-blocks`. Sửa xong gõ /nguyento reload.
+
+
+## Bố cục Flat / GitHub Actions
+
+Các file `.java`, `pom.xml`, `plugin.yml`, `config.yml` nằm ở thư mục gốc. Upload toàn bộ nội dung ZIP vào thư mục gốc repository (không upload cả thư mục bọc ngoài). GitHub Actions tự chạy `mvn clean package`; JAR được tạo tại `target/NguyenTo.jar` và xuất hiện trong Artifacts. Yêu cầu Java 17 và Maven.
