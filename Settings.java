@@ -39,6 +39,16 @@ public class Settings {
         return plugin.getConfig().getBoolean("general." + key);
     }
 
+    /** % buff chỉ số (máu, sát thương, tốc độ, giáp) mà thành phần giữ lại khi nằm trong hợp thể. */
+    public double fusionInherit() {
+        return Math.max(0.0, plugin.getConfig().getDouble("fusion.inherit-stats-percent", 100.0));
+    }
+
+    /** Số cấp độ (level kinh nghiệm) tốn mỗi lần kết hợp. 0 = miễn phí. */
+    public int fusionCostLevels() {
+        return Math.max(0, plugin.getConfig().getInt("fusion.cost-levels", 0));
+    }
+
     // ------------------------------------------------------------------
     //  Mô tả hiển thị
     // ------------------------------------------------------------------
@@ -117,11 +127,96 @@ public class Settings {
                         + f(n(e, "skill.damage")) + " sát thương");
                 skills.add("Hồi chiêu " + f(n(e, "skill.cooldown")) + "s");
                 break;
+            case RONG:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                stat(buffs, e, "armor-percent", "+{v}% giáp");
+                if (n(e, "breath-chance") > 0)
+                    passives.add(f(n(e, "breath-chance")) + "% phun Hơi Thở Rồng, gây " + f(n(e, "breath-damage"))
+                            + " sát thương lan bán kính " + f(n(e, "breath-radius")) + " block quanh mục tiêu");
+                break;
+            case PLASMA:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                if (n(e, "plasma-chance") > 0)
+                    passives.add(f(n(e, "plasma-chance")) + "% gây Bùng Nổ Plasma: " + f(n(e, "plasma-damage"))
+                            + " sát thương lan bán kính " + f(n(e, "plasma-radius")) + " block và đốt "
+                            + f(n(e, "plasma-ignite-seconds")) + "s");
+                break;
+            case BANG_THUY:
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
+                if (n(e, "freeze-chance") > 0)
+                    passives.add(f(n(e, "freeze-chance")) + "% Đóng Băng mục tiêu " + f(n(e, "freeze-seconds"))
+                            + "s (gần như không thể di chuyển) và gây " + f(n(e, "freeze-damage")) + " sát thương");
+                break;
+            case THANH_LONG:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                if (n(e, "smite-chance") > 0)
+                    passives.add(f(n(e, "smite-chance")) + "% giáng Phán Quyết Thánh Long: " + f(n(e, "smite-damage"))
+                            + " sát thương thánh và hồi " + f(n(e, "smite-heal")) + " máu cho bản thân");
+                break;
+            case HAC_LONG:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                if (n(e, "curse-chance") > 0)
+                    passives.add(f(n(e, "curse-chance")) + "% giáng Lời Nguyền Hắc Long: " + f(n(e, "curse-damage"))
+                            + " sát thương bóng tối và héo mòn " + f(n(e, "curse-seconds")) + "s");
+                break;
+            case DUNG_NHAM:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                stat(buffs, e, "armor-percent", "+{v}% giáp");
+                if (n(e, "magma-chance") > 0)
+                    passives.add(f(n(e, "magma-chance")) + "% Dung Nham Phun Trào: " + f(n(e, "magma-damage"))
+                            + " sát thương lan bán kính " + f(n(e, "magma-radius")) + " block và đốt "
+                            + f(n(e, "magma-ignite-seconds")) + "s");
+                break;
+            case BAO_TO:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
+                stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
+                if (n(e, "storm-chance") > 0)
+                    passives.add(f(n(e, "storm-chance")) + "% Cơn Bão Sét: " + f(n(e, "storm-damage"))
+                            + " sát thương lan bán kính " + f(n(e, "storm-radius")) + " block và hất tung kẻ địch");
+                break;
+            case BAO_TUYET:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
+                if (n(e, "blizzard-chance") > 0)
+                    passives.add(f(n(e, "blizzard-chance")) + "% Bão Tuyết: " + f(n(e, "blizzard-damage"))
+                            + " sát thương lan bán kính " + f(n(e, "blizzard-radius")) + " block và làm chậm "
+                            + f(n(e, "blizzard-seconds")) + "s");
+                break;
+            case VIEM_LONG:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                if (n(e, "inferno-chance") > 0)
+                    passives.add(f(n(e, "inferno-chance")) + "% Long Viêm Thiêu Đốt: " + f(n(e, "inferno-damage"))
+                            + " sát thương lan bán kính " + f(n(e, "inferno-radius")) + " block và đốt "
+                            + f(n(e, "inferno-ignite-seconds")) + "s");
+                break;
             default:
                 break;
         }
 
         List<String> out = new ArrayList<>();
+        if (e.isFusion()) {
+            List<Element> parts = e.getParts();
+            if (parts.size() == 2) {
+                out.add("§7Hợp thể: " + parts.get(0).colored() + " §7+ " + parts.get(1).colored());
+            }
+            out.add("§7Chỉ chiếm §f1 ô §7nhưng nhận buff, nội tại");
+            out.add("§7và chiêu của §fcả hai §7nguyên tố");
+            if (fusionInherit() < 100) {
+                out.add("§8(Chỉ số máu/sát thương/tốc độ/giáp của hai");
+                out.add("§8nguyên tố gốc giữ lại " + f(fusionInherit()) + "%)");
+            }
+            out.add("");
+        }
         if (!buffs.isEmpty()) {
             out.add("§6§lBuff:");
             for (String s : buffs) wrap(out, s, "§7 • ", "§7   ");

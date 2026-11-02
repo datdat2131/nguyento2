@@ -90,8 +90,8 @@ public class SkillItems {
      */
     public void sync(Player p) {
         Set<Element> want = EnumSet.noneOf(Element.class);
-        for (Element e : manager.getEquipped(p)) {
-            if (e.isSpecial()) want.add(e);
+        for (Element e : manager.getEffective(p)) {
+            if (e.hasSkill()) want.add(e);
         }
         Set<Element> found = EnumSet.noneOf(Element.class);
 

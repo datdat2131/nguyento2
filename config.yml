@@ -22,6 +22,19 @@ performance:
   view-range-blocks: 32        # khoảng cách tối đa còn nhìn thấy nguyên tố (block)
   skill-item-check-seconds: 2  # bao lâu kiểm tra lại vật phẩm kỹ năng
 
+# ----------------------------------------------------------------------
+#  HỢP THỂ (FUSION) - kết hợp 2 nguyên tố thành 1
+#  Mở menu /nguyento, click vào hợp thể chưa mở khóa (hoặc /nguyento fuse <id>).
+#  Hợp thể chỉ chiếm 1 ô trang bị nhưng nhận buff + nội tại + chiêu của cả 2 nguyên tố gốc,
+#  cộng thêm buff & nội tại riêng ở mục elements bên dưới.
+#  Không thể trang bị hợp thể cùng nguyên tố gốc của nó (vì trùng nhau).
+# ----------------------------------------------------------------------
+fusion:
+  cost-levels: 0               # số cấp độ (level kinh nghiệm) tốn mỗi lần kết hợp. 0 = miễn phí
+  inherit-stats-percent: 100   # % buff chỉ số (máu, sát thương, tốc độ, giáp) của 2 nguyên tố gốc được giữ lại
+                               # khi nằm trong hợp thể. Hạ xuống (vd 60) nếu thấy hợp thể quá mạnh.
+                               # (nội tại và chiêu thức luôn giữ nguyên 100%)
+
 elements:
 
   # ---------------- LỬA ----------------
@@ -102,3 +115,88 @@ elements:
       radius: 10
       damage: 70
       cast-delay-ticks: 20           # thời gian báo trước (20 tick = 1 giây), 0 = đánh ngay
+
+  # ---------------- RỒNG (nguyên tố mới, nguyên liệu của Thánh Long / Hắc Long) ----------------
+  rong:
+    damage: 2
+    max-health: 4
+    armor-percent: 10
+    breath-chance: 12        # % phun Hơi Thở Rồng khi tấn công
+    breath-damage: 4         # sát thương lan
+    breath-radius: 3         # bán kính (block)
+
+  # ======================= HỢP THỂ =======================
+
+  # ---------------- PLASMA = LỬA + SÉT ----------------
+  plasma:
+    damage: 1
+    attack-speed-percent: 5
+    max-health: 2
+    plasma-chance: 15        # % gây Bùng Nổ Plasma
+    plasma-damage: 5
+    plasma-radius: 3
+    plasma-ignite-seconds: 3
+
+  # ---------------- BĂNG THỦY = NƯỚC + BĂNG ----------------
+  bang_thuy:
+    max-health: 4
+    speed-percent: 5
+    freeze-chance: 12        # % đóng băng mục tiêu
+    freeze-seconds: 2
+    freeze-amplifier: 4      # 4 = Chậm V (gần như đứng yên)
+    freeze-damage: 3
+
+  # ---------------- THÁNH LONG = ÁNH SÁNG + RỒNG ----------------
+  thanh_long:
+    damage: 2
+    max-health: 4
+    smite-chance: 12         # % giáng Phán Quyết Thánh Long
+    smite-damage: 6
+    smite-heal: 2            # máu hồi cho bản thân (2 = 1 tim)
+
+  # ---------------- HẮC LONG = BÓNG TỐI + RỒNG ----------------
+  hac_long:
+    damage: 3
+    max-health: 2
+    curse-chance: 12         # % giáng Lời Nguyền Hắc Long
+    curse-damage: 5
+    curse-seconds: 4         # thời gian héo mòn (Wither II)
+
+  # ---------------- DUNG NHAM = LỬA + ĐẤT ----------------
+  dung_nham:
+    damage: 1
+    max-health: 4
+    armor-percent: 10
+    magma-chance: 12         # % Dung Nham Phun Trào
+    magma-damage: 5
+    magma-radius: 3
+    magma-ignite-seconds: 4
+
+  # ---------------- BÃO TỐ = GIÓ + SÉT ----------------
+  bao_to:
+    damage: 1
+    speed-percent: 5
+    attack-speed-percent: 8
+    storm-chance: 14         # % Cơn Bão Sét (hất tung kẻ địch)
+    storm-damage: 4
+    storm-radius: 3
+
+  # ---------------- BÃO TUYẾT = GIÓ + BĂNG ----------------
+  bao_tuyet:
+    damage: 1
+    max-health: 2
+    speed-percent: 8
+    blizzard-chance: 12      # % Bão Tuyết
+    blizzard-damage: 3
+    blizzard-radius: 4
+    blizzard-seconds: 3
+    blizzard-amplifier: 2    # 2 = Chậm III
+
+  # ---------------- VIÊM LONG = LỬA + RỒNG ----------------
+  viem_long:
+    damage: 3
+    max-health: 2
+    inferno-chance: 12       # % Long Viêm Thiêu Đốt
+    inferno-damage: 7
+    inferno-radius: 4
+    inferno-ignite-seconds: 5

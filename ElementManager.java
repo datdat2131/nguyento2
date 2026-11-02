@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -41,7 +42,9 @@ public class ElementManager {
 
     public static final int MAX_EQUIPPED = 3;
 
-    public enum EquipResult { OK, NOT_OWNED, ALREADY, FULL }
+    public enum EquipResult { OK, NOT_OWNED, ALREADY, FULL, CONFLICT }
+
+    public enum FuseResult { OK, NOT_FUSION, ALREADY, MISSING, NO_LEVELS }
 
     private static class Orbit {
         final Element element;
@@ -160,19 +163,57 @@ public class ElementManager {
         return new ArrayList<>(equipped.getOrDefault(p.getUniqueId(), Collections.emptyList()));
     }
 
-    /** Người chơi có đang trang bị nguyên tố có chiêu (Bóng Tối / Ánh Sáng) không. */
-    public boolean hasSpecial(Player p) {
+    /**
+     * Danh sách nguyên tố có hiệu lực: hợp thể được bung ra thành 2 thành phần + chính nó.
+     * Dùng cho mọi logic buff / nội tại / chiêu. Không trùng lặp.
+     */
+    public List<Element> getEffective(Player p) {
         List<Element> l = equipped.get(p.getUniqueId());
-        if (l == null) return false;
+        if (l == null || l.isEmpty()) return Collections.emptyList();
+        return expand(l);
+    }
+
+    private static List<Element> expand(List<Element> l) {
+        Set<Element> out = new LinkedHashSet<>();
         for (Element e : l) {
-            if (e.isSpecial()) return true;
+            if (e.isFusion()) out.addAll(e.getParts());
+            out.add(e);
+        }
+        return new ArrayList<>(out);
+    }
+
+    /** Người chơi có đang có nguyên tố có chiêu (Bóng Tối / Ánh Sáng, kể cả qua hợp thể) không. */
+    public boolean hasSpecial(Player p) {
+        for (Element e : getEffective(p)) {
+            if (e.hasSkill()) return true;
         }
         return false;
     }
 
+    /** Có nguyên tố e đang hiệu lực không (kể cả khi nó nằm trong một hợp thể đang trang bị). */
     public boolean has(Player p, Element e) {
         List<Element> l = equipped.get(p.getUniqueId());
-        return l != null && l.contains(e);
+        if (l == null) return false;
+        for (Element x : l) {
+            if (x.covers(e)) return true;
+        }
+        return false;
+    }
+
+    /** Nguyên tố đang trang bị mà trùng với e (e nằm trong nó, hoặc nó nằm trong e). null nếu không trùng. */
+    public Element conflictWith(Player p, Element e) {
+        List<Element> l = equipped.get(p.getUniqueId());
+        if (l == null) return null;
+        for (Element x : l) {
+            if (x == e) continue;
+            if (x.covers(e) || e.covers(x)) return x;
+            if (x.isFusion() && e.isFusion()) {
+                for (Element part : e.getParts()) {
+                    if (x.covers(part)) return x;
+                }
+            }
+        }
+        return null;
     }
 
     private void saveEquipped(Player p) {
@@ -184,6 +225,7 @@ public class ElementManager {
         if (!owns(p, e)) return EquipResult.NOT_OWNED;
         List<Element> list = equipped.computeIfAbsent(p.getUniqueId(), k -> new ArrayList<>());
         if (list.contains(e)) return EquipResult.ALREADY;
+        if (conflictWith(p, e) != null) return EquipResult.CONFLICT;
         if (list.size() >= MAX_EQUIPPED) return EquipResult.FULL;
         list.add(e);
         refreshAfterChange(p);
@@ -358,12 +400,23 @@ public class ElementManager {
             if (!any && !flagged) return; // chưa từng đụng tới chỉ số của người này
 
             double hp = 0, dmg = 0, spd = 0, aspd = 0, armor = 0;
-            for (Element e : eq) {
-                hp += settings.n(e, "max-health");
-                dmg += settings.n(e, "damage");
-                spd += settings.n(e, "speed-percent") / 100.0;
-                aspd += settings.n(e, "attack-speed-percent") / 100.0;
-                armor += settings.n(e, "armor-percent") / 100.0;
+            // hợp thể: thành phần được tính theo % kế thừa (config fusion.inherit-stats-percent), phần riêng tính đủ
+            Map<Element, Double> weights = new java.util.LinkedHashMap<>();
+            double inherit = settings.fusionInherit() / 100.0;
+            for (Element x : eq) {
+                if (x.isFusion()) {
+                    for (Element part : x.getParts()) weights.merge(part, inherit, Math::max);
+                }
+                weights.merge(x, 1.0, Math::max);
+            }
+            for (Map.Entry<Element, Double> en : weights.entrySet()) {
+                Element e = en.getKey();
+                double k = en.getValue();
+                hp += k * settings.n(e, "max-health");
+                dmg += k * settings.n(e, "damage");
+                spd += k * settings.n(e, "speed-percent") / 100.0;
+                aspd += k * settings.n(e, "attack-speed-percent") / 100.0;
+                armor += k * settings.n(e, "armor-percent") / 100.0;
             }
 
             setBase(p, Attrs.MAX_HEALTH, Math.max(1.0, DEF_HEALTH + hp));
@@ -399,6 +452,35 @@ public class ElementManager {
         AttributeInstance inst = p.getAttribute(attr);
         if (inst == null) return;
         if (Math.abs(inst.getBaseValue() - value) > 1e-9) inst.setBaseValue(value);
+    }
+
+    // ------------------------------------------------------------------
+    //  Fusion: kết hợp 2 nguyên tố thành hợp thể
+    // ------------------------------------------------------------------
+
+    /** Kết hợp: cần sở hữu cả 2 nguyên tố thành phần (+ tốn cấp độ nếu config có đặt). Thành phần không bị mất. */
+    public FuseResult fuse(Player p, Element f) {
+        if (!f.isFusion()) return FuseResult.NOT_FUSION;
+        if (owns(p, f)) return FuseResult.ALREADY;
+        for (Element part : f.getParts()) {
+            if (!owns(p, part)) return FuseResult.MISSING;
+        }
+        int cost = settings.fusionCostLevels();
+        if (cost > 0 && p.getGameMode() != GameMode.CREATIVE) {
+            if (p.getLevel() < cost) return FuseResult.NO_LEVELS;
+            p.setLevel(p.getLevel() - cost);
+        }
+        grant(p, f);
+        return FuseResult.OK;
+    }
+
+    /** Người chơi đủ điều kiện (sở hữu cả 2 thành phần) để kết hợp f chưa. */
+    public boolean canFuse(Player p, Element f) {
+        if (!f.isFusion()) return false;
+        for (Element part : f.getParts()) {
+            if (!owns(p, part)) return false;
+        }
+        return true;
     }
 
     // ------------------------------------------------------------------
@@ -621,14 +703,37 @@ public class ElementManager {
             o.nextParticle = tick + (el.isSpecial() ? 4 : 6);
             int n = scaled(el.isSpecial() ? 2 : 1);
             if (n > 0) w.spawnParticle(el.getParticle(), loc, n, 0.15, 0.15, 0.15, 0.01);
+            if (el.isFusion()) {
+                // hợp thể: thêm hạt của cả 2 nguyên tố thành phần
+                for (Element part : el.getParts()) {
+                    int m = scaled(1);
+                    if (m > 0) w.spawnParticle(part.getParticle(), loc, m, 0.2, 0.2, 0.2, 0.01);
+                }
+            }
         }
         if (el.isSpecial() && tick >= o.nextDust) {
             o.nextDust = tick + 12;
             int n = scaled(3);
             if (n > 0) {
-                Color c = el == Element.ANH_SANG ? Color.fromRGB(255, 215, 0) : Color.fromRGB(110, 0, 170);
+                Color c = dustColor(el);
                 Fx.dust(w, loc, n, 0.25, c, 1.2f);
             }
+        }
+    }
+
+    private static Color dustColor(Element el) {
+        switch (el) {
+            case ANH_SANG: return Color.fromRGB(255, 215, 0);
+            case RONG: return Color.fromRGB(170, 20, 20);
+            case PLASMA: return Color.fromRGB(255, 80, 220);
+            case BANG_THUY: return Color.fromRGB(90, 220, 255);
+            case THANH_LONG: return Color.fromRGB(255, 240, 140);
+            case HAC_LONG: return Color.fromRGB(60, 0, 90);
+            case DUNG_NHAM: return Color.fromRGB(255, 120, 20);
+            case BAO_TO: return Color.fromRGB(120, 200, 255);
+            case BAO_TUYET: return Color.fromRGB(220, 245, 255);
+            case VIEM_LONG: return Color.fromRGB(255, 70, 20);
+            default: return Color.fromRGB(110, 0, 170);
         }
     }
 
@@ -663,6 +768,7 @@ public class ElementManager {
         float bob = (float) (Math.sin((when + slot * 13) * 0.12) * 0.07);
         float s = slot == 0 ? 0.9f : 0.75f;
         if (el.isSpecial()) s *= 1.25f;
+        if (el.isFusion()) s *= 1.1f;
         return new Transformation(new Vector3f(0f, bob, 0f), q, new Vector3f(s, s, s), new Quaternionf());
     }
 }

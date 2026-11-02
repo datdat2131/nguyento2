@@ -154,7 +154,7 @@ public class SkillManager {
     private void hud(Player p) {
         if (!manager.hasSpecial(p)) return;
         StringBuilder sb = new StringBuilder();
-        for (Element e : manager.getEquipped(p)) {
+        for (Element e : manager.getEffective(p)) {
             String part = null;
             if (e == Element.BONG_TOI) part = hudPart(p, "§5✦ Lãnh Địa", CD_DOMAIN);
             else if (e == Element.ANH_SANG) part = hudPart(p, "§6✦ Thần Phạt", CD_DIVINE);
