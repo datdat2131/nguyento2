@@ -39,11 +39,6 @@ public class Settings {
         return plugin.getConfig().getBoolean("general." + key);
     }
 
-    /** % buff chỉ số (máu, sát thương, tốc độ, giáp) mà thành phần giữ lại khi nằm trong hợp thể. */
-    public double fusionInherit() {
-        return Math.max(0.0, plugin.getConfig().getDouble("fusion.inherit-stats-percent", 100.0));
-    }
-
     /** Số cấp độ (level kinh nghiệm) tốn mỗi lần kết hợp. 0 = miễn phí. */
     public int fusionCostLevels() {
         return Math.max(0, plugin.getConfig().getInt("fusion.cost-levels", 0));
@@ -110,10 +105,11 @@ public class Settings {
                 if (n(e, "dark-chance") > 0)
                     passives.add(f(n(e, "dark-chance")) + "% đòn đánh gây thêm " + f(n(e, "dark-bonus-percent")) + "% sát thương bóng tối");
                 skills.add("Lãnh Địa Bóng Tối: chuột phải vật phẩm kỹ năng (trang bị ở ô nào cũng được)");
-                skills.add("Tạo vùng bóng tối " + f(n(e, "skill.duration")) + "s, bán kính " + f(n(e, "skill.radius"))
-                        + " block. Bản thân tăng tốc, +" + f(n(e, "skill.owner-bonus-damage")) + " sát thương, +"
-                        + f(n(e, "skill.owner-extra-lifesteal-percent")) + "% hút máu. Kẻ địch bên trong bị chậm"
-                        + (n(e, "skill.enemy-nausea") > 0 ? " và buồn nôn" : ""));
+                skills.add("Tạo lãnh địa bóng tối bán kính " + f(n(e, "skill.radius")) + " block trong " + f(n(e, "skill.duration"))
+                        + "s. Kẻ địch bên trong bị KHÓA CHÂN, không thể chạy ra ngoài, bị chậm"
+                        + (n(e, "skill.enemy-nausea") > 0 ? " và buồn nôn" : "")
+                        + ". Bản thân tăng tốc, +" + f(n(e, "skill.owner-bonus-damage")) + " sát thương, +"
+                        + f(n(e, "skill.owner-extra-lifesteal-percent")) + "% hút máu");
                 skills.add("Hồi chiêu " + f(n(e, "skill.cooldown")) + "s");
                 break;
             case ANH_SANG:
@@ -123,28 +119,80 @@ public class Settings {
                         + "% tạo lá chắn máu vàng bằng " + f(n(e, "shield.shield-percent"))
                         + "% máu tối đa (hồi " + f(n(e, "shield.cooldown")) + "s)");
                 skills.add("Thần Phạt: chuột phải vật phẩm kỹ năng (trang bị ở ô nào cũng được)");
-                skills.add("Tạo cột hào quang phạm vi " + f(n(e, "skill.radius")) + " block, gây "
-                        + f(n(e, "skill.damage")) + " sát thương");
+                skills.add("Triệu hồi " + f(n(e, "skill.pillars")) + " cột ánh sáng giáng xuống kẻ địch gần nhất, mỗi cột gây "
+                        + f(n(e, "skill.damage")) + " sát thương trong bán kính " + f(n(e, "skill.radius")) + " block");
                 skills.add("Hồi chiêu " + f(n(e, "skill.cooldown")) + "s");
                 break;
             case RONG:
                 stat(buffs, e, "damage", "+{v} sát thương");
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "armor-percent", "+{v}% giáp");
-                if (n(e, "breath-chance") > 0)
-                    passives.add(f(n(e, "breath-chance")) + "% phun Hơi Thở Rồng, gây " + f(n(e, "breath-damage"))
-                            + " sát thương lan bán kính " + f(n(e, "breath-radius")) + " block quanh mục tiêu");
+                skills.add("Hơi Thở Rồng: chuột phải vật phẩm kỹ năng (trang bị ở ô nào cũng được)");
+                skills.add("Tạo vùng hơi thở rồng bán kính " + f(n(e, "skill.radius")) + " block, gây "
+                        + f(n(e, "skill.damage-per-second")) + " sát thương mỗi giây trong " + f(n(e, "skill.duration")) + "s");
+                skills.add("Hồi chiêu " + f(n(e, "skill.cooldown")) + "s");
                 break;
-            case PLASMA:
+
+            // ---------------- HỢP THỂ ----------------
+            case FIRE_WATER:
                 stat(buffs, e, "damage", "+{v} sát thương");
-                stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
-                if (n(e, "plasma-chance") > 0)
-                    passives.add(f(n(e, "plasma-chance")) + "% gây Bùng Nổ Plasma: " + f(n(e, "plasma-damage"))
-                            + " sát thương lan bán kính " + f(n(e, "plasma-radius")) + " block và đốt "
-                            + f(n(e, "plasma-ignite-seconds")) + "s");
+                stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
+                if (n(e, "steam-chance") > 0) {
+                    passives.add(f(n(e, "steam-chance")) + "% tạo vụ nổ hơi nước nhỏ: " + f(n(e, "steam-damage"))
+                            + " sát thương phép bán kính " + f(n(e, "steam-radius")) + " block, Giảm Tốc I "
+                            + f(n(e, "steam-slow-seconds")) + "s");
+                    passives.add("Mục tiêu đang Thiêu Đốt: vụ nổ +" + f(n(e, "steam-burn-bonus-percent")) + "% sát thương");
+                    passives.add("Mục tiêu đang Ướt: " + f(n(e, "steam-stun-chance")) + "% Choáng "
+                            + f(n(e, "steam-stun-seconds")) + "s");
+                }
+                guardLine(passives, e, "tạo màn sương");
+                break;
+            case BAO_CAT:
+                stat(buffs, e, "armor-percent", "+{v}% giáp");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
+                stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
+                if (n(e, "sand-chance") > 0) {
+                    passives.add(f(n(e, "sand-chance")) + "% tạo cơn bão cát: " + f(n(e, "sand-damage"))
+                            + " sát thương diện rộng " + f(n(e, "sand-radius")) + " block, Giảm tốc "
+                            + f(n(e, "sand-slow-percent")) + "% trong " + f(n(e, "sand-slow-seconds")) + "s");
+                    passives.add(f(n(e, "sand-knockup-chance")) + "% hất tung nhẹ mỗi kẻ địch trúng");
+                    passives.add("Trúng từ " + f(n(e, "sand-multi-count")) + " mục tiêu: +" + f(n(e, "sand-speed-bonus-percent"))
+                            + "% tốc độ di chuyển " + f(n(e, "sand-speed-seconds")) + "s");
+                }
+                guardLine(passives, e, "tạo Khiên Cát");
+                break;
+            case HAN_LOI:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
+                stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
+                if (n(e, "bolt-chance") > 0) {
+                    passives.add(f(n(e, "bolt-chance")) + "% triệu hồi tia sét băng: " + f(n(e, "bolt-damage"))
+                            + " sát thương sét + " + f(n(e, "frost-damage")) + " sát thương băng");
+                    passives.add("Mục tiêu bị Chậm " + f(n(e, "slow-percent")) + "% trong " + f(n(e, "slow-seconds")) + "s");
+                    passives.add("Mục tiêu đang bị Chậm: " + f(n(e, "freeze-chance")) + "% Đóng Băng "
+                            + f(n(e, "freeze-seconds")) + "s");
+                    passives.add("Đánh mục tiêu đang Đóng Băng: phá băng, +" + f(n(e, "shatter-bonus-percent")) + "% sát thương");
+                }
+                guardLine(passives, e, "tạo Lôi Băng Hộ Thể");
+                break;
+            case LOI_VIEM:
+                stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
+                stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
+                if (n(e, "strike-chance") > 0) {
+                    passives.add("Thiên Hỏa Lôi Bạo: " + f(n(e, "strike-chance")) + "% tạo Lôi Viêm lên mục tiêu, gây "
+                            + f(n(e, "fire-damage")) + " sát thương lửa + " + f(n(e, "lightning-damage")) + " sát thương sét");
+                    passives.add("Thiêu Đốt " + f(n(e, "burn-seconds")) + "s và Nhiễm Điện " + f(n(e, "static-seconds")) + "s");
+                    passives.add("Mục tiêu có cả 2 hiệu ứng: Lôi Viêm Bộc Phát +" + f(n(e, "burst-bonus-percent"))
+                            + "% sát thương, lan sang tối đa " + f(n(e, "burst-targets")) + " kẻ địch trong "
+                            + f(n(e, "burst-radius")) + " block (hồi " + f(n(e, "burst-cooldown")) + "s)");
+                }
                 break;
             case BANG_THUY:
+                stat(buffs, e, "damage", "+{v} sát thương");
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 if (n(e, "freeze-chance") > 0)
@@ -154,16 +202,28 @@ public class Settings {
             case THANH_LONG:
                 stat(buffs, e, "damage", "+{v} sát thương");
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
-                if (n(e, "smite-chance") > 0)
-                    passives.add(f(n(e, "smite-chance")) + "% giáng Phán Quyết Thánh Long: " + f(n(e, "smite-damage"))
-                            + " sát thương thánh và hồi " + f(n(e, "smite-heal")) + " máu cho bản thân");
+                stat(buffs, e, "armor-percent", "+{v}% giáp");
+                stat(buffs, e, "damage-reduction-percent", "Giảm {v}% sát thương nhận vào");
+                if (n(e, "soul-chance") > 0) {
+                    passives.add("Thánh Long Giáng Thế: " + f(n(e, "soul-chance")) + "% triệu hồi Long Hồn Ánh Sáng, gây "
+                            + f(n(e, "soul-damage")) + " sát thương Ánh Sáng + Rồng");
+                    passives.add("Mục tiêu bị Thánh Ấn " + f(n(e, "mark-seconds")) + "s: đánh trúng gây thêm "
+                            + f(n(e, "holy-bonus-percent")) + "% sát thương");
+                }
+                guardLine(passives, e, "kích hoạt Long Hộ");
                 break;
             case HAC_LONG:
                 stat(buffs, e, "damage", "+{v} sát thương");
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
-                if (n(e, "curse-chance") > 0)
-                    passives.add(f(n(e, "curse-chance")) + "% giáng Lời Nguyền Hắc Long: " + f(n(e, "curse-damage"))
-                            + " sát thương bóng tối và héo mòn " + f(n(e, "curse-seconds")) + "s");
+                stat(buffs, e, "lifesteal-percent", "{v}% sát thương gây ra hồi thành máu");
+                if (n(e, "soul-chance") > 0) {
+                    passives.add("Hắc Long Thôn Phệ: " + f(n(e, "soul-chance")) + "% triệu hồi Hắc Long Hồn, gây "
+                            + f(n(e, "soul-damage")) + " sát thương Rồng + Bóng Tối");
+                    passives.add("Mục tiêu bị Hắc Ấn " + f(n(e, "mark-seconds")) + "s: đánh trúng gây Thôn Phệ +"
+                            + f(n(e, "devour-bonus-percent")) + "% sát thương và hồi " + f(n(e, "devour-heal-percent"))
+                            + "% máu tối đa");
+                }
+                guardLine(passives, e, "kích hoạt Hắc Long Hộ Thể");
                 break;
             case DUNG_NHAM:
                 stat(buffs, e, "damage", "+{v} sát thương");
@@ -176,6 +236,7 @@ public class Settings {
                 break;
             case BAO_TO:
                 stat(buffs, e, "damage", "+{v} sát thương");
+                stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
                 if (n(e, "storm-chance") > 0)
@@ -209,12 +270,8 @@ public class Settings {
             if (parts.size() == 2) {
                 out.add("§7Hợp thể: " + parts.get(0).colored() + " §7+ " + parts.get(1).colored());
             }
-            out.add("§7Chỉ chiếm §f1 ô §7nhưng nhận buff, nội tại");
-            out.add("§7và chiêu của §fcả hai §7nguyên tố");
-            if (fusionInherit() < 100) {
-                out.add("§8(Chỉ số máu/sát thương/tốc độ/giáp của hai");
-                out.add("§8nguyên tố gốc giữ lại " + f(fusionInherit()) + "%)");
-            }
+            out.add("§7Nguyên tố §fđộc lập§7, chỉ chiếm §f1 ô§7.");
+            out.add("§cKết hợp sẽ MẤT cả hai nguyên tố gốc.");
             out.add("");
         }
         if (!buffs.isEmpty()) {
@@ -230,6 +287,19 @@ public class Settings {
             for (String s : skills) wrap(out, s, "§7 • ", "§7   ");
         }
         return out;
+    }
+
+    /** Dòng mô tả nội tại "khi máu thấp" của hợp thể (đọc từ mục guard trong config). */
+    private void guardLine(List<String> passives, Element e, String what) {
+        double thr = n(e, "guard.health-threshold-percent");
+        if (thr <= 0) return;
+        StringBuilder sb = new StringBuilder();
+        sb.append("Khi máu dưới ").append(f(thr)).append("%: ").append(what).append(", giảm ")
+                .append(f(n(e, "guard.reduction-percent"))).append("% sát thương nhận vào");
+        if (n(e, "guard.speed-percent") > 0) sb.append(", +").append(f(n(e, "guard.speed-percent"))).append("% tốc độ di chuyển");
+        if (n(e, "guard.damage-percent") > 0) sb.append(", +").append(f(n(e, "guard.damage-percent"))).append("% sát thương");
+        sb.append(" trong ").append(f(n(e, "guard.seconds"))).append("s (hồi ").append(f(n(e, "guard.cooldown"))).append("s)");
+        passives.add(sb.toString());
     }
 
     private static void wrap(List<String> out, String text, String first, String rest) {

@@ -21,19 +21,28 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
     private SkillManager skills;
     private SkillItems items;
     private ElementGui gui;
+    private FusionGui fusionGui;
+    private Marks marks;
 
     @Override
     public void onEnable() {
         settings = new Settings(this);
-        manager = new ElementManager(this, settings);
+        marks = new Marks();
+        marks.start(this);
+        Vfx.init(this, settings);
+        manager = new ElementManager(this, settings, marks);
         skills = new SkillManager(this, manager, settings);
         gui = new ElementGui(manager, settings);
+        fusionGui = new FusionGui(manager, settings, gui);
+        gui.setFusionGui(fusionGui);
         items = new SkillItems(this, manager, settings);
         manager.setSkillItems(items);
 
         Bukkit.getPluginManager().registerEvents(gui, this);
+        Bukkit.getPluginManager().registerEvents(fusionGui, this);
+        Bukkit.getPluginManager().registerEvents(skills, this);
         Bukkit.getPluginManager().registerEvents(new ElementListener(manager), this);
-        Bukkit.getPluginManager().registerEvents(new CombatListener(this, manager, settings, skills), this);
+        Bukkit.getPluginManager().registerEvents(new CombatListener(this, manager, settings, skills, marks), this);
         Bukkit.getPluginManager().registerEvents(new SkillItemListener(this, items, skills), this);
 
         getCommand("nguyento").setExecutor(this);
@@ -51,6 +60,8 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
     public void onDisable() {
         if (skills != null) skills.shutdown();
         if (manager != null) manager.shutdown();
+        if (marks != null) marks.shutdown();
+        Vfx.shutdown();
     }
 
     @Override
@@ -75,36 +86,12 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
             return true;
         }
 
-        if (sub.equals("fuse")) {
+        if (sub.equals("fusion") || sub.equals("hopthe") || sub.equals("fuse")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("Lệnh này chỉ dành cho người chơi.");
                 return true;
             }
-            Player p = (Player) sender;
-            Element f = args.length >= 2 ? Element.fromId(args[1]) : null;
-            if (f == null || !f.isFusion()) {
-                sender.sendMessage("§eDùng: /nguyento fuse <hợp thể>. Có: " + fusionList());
-                return true;
-            }
-            ElementManager.FuseResult r = manager.fuse(p, f);
-            switch (r) {
-                case OK:
-                    p.sendMessage("§d✦ Kết hợp thành công! Bạn sở hữu hợp thể " + f.colored() + "§d. §7Gõ §f/nguyento §7để trang bị.");
-                    p.playSound(p.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 0.9f, 0.8f);
-                    p.getWorld().spawnParticle(f.getParticle(), p.getLocation().add(0, 1, 0), 60, 0.5, 0.9, 0.5, 0.1);
-                    break;
-                case ALREADY:
-                    p.sendMessage("§cBạn đã sở hữu hợp thể " + f.colored() + " §crồi.");
-                    break;
-                case MISSING:
-                    p.sendMessage("§cBạn cần sở hữu cả hai nguyên tố gốc của " + f.colored() + "§c.");
-                    break;
-                case NO_LEVELS:
-                    p.sendMessage("§cCần §e" + settings.fusionCostLevels() + " §ccấp độ để kết hợp " + f.colored() + "§c.");
-                    break;
-                default:
-                    break;
-            }
+            fusionGui.open((Player) sender);
             return true;
         }
 
@@ -192,7 +179,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
 
         sender.sendMessage("§e/nguyento §7- mở menu nguyên tố");
         sender.sendMessage("§e/nguyento stats §7- xem chỉ số buff thật đang có");
-        sender.sendMessage("§e/nguyento fuse <hợp thể> §7- kết hợp 2 nguyên tố (Plasma, Băng Thủy, Thánh Long, Hắc Long)");
+        sender.sendMessage("§e/nguyento fusion §7- mở menu Hợp Thể (kết hợp 2 nguyên tố, mất 2 nguyên tố gốc)");
         if (sender.hasPermission("nguyento.admin")) {
             sender.sendMessage("§e/nguyento give <người chơi> <nguyên tố|all> [số lượng] §7- đưa cuộn giấy");
             sender.sendMessage("§e/nguyento unlock <người chơi> <nguyên tố|all> §7- mở khóa trực tiếp");
@@ -200,16 +187,6 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
             sender.sendMessage("§e/nguyento reload §7- tải lại config.yml");
         }
         return true;
-    }
-
-    private String fusionList() {
-        StringBuilder sb = new StringBuilder();
-        for (Element e : Element.values()) {
-            if (!e.isFusion()) continue;
-            if (sb.length() > 0) sb.append(", ");
-            sb.append(e.getId());
-        }
-        return sb.toString();
     }
 
     private String idList() {
@@ -226,12 +203,8 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
             out.add("stats");
-            out.add("fuse");
+            out.add("fusion");
             if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reset", "reload"));
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("fuse")) {
-            for (Element e : Element.values()) {
-                if (e.isFusion()) out.add(e.getId());
-            }
         } else if (sender.hasPermission("nguyento.admin")) {
             if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock")
                     || args[0].equalsIgnoreCase("reset"))) {

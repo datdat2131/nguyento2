@@ -41,13 +41,22 @@ public class SkillItems {
     }
 
     private Material materialFor(Element e) {
-        return e == Element.ANH_SANG ? Material.NETHER_STAR : Material.ECHO_SHARD;
+        switch (e) {
+            case ANH_SANG: return Material.NETHER_STAR;
+            case RONG: return Material.DRAGON_BREATH;
+            default: return Material.ECHO_SHARD;
+        }
     }
 
     public ItemStack create(Player owner, Element e) {
         ItemStack item = new ItemStack(materialFor(e));
         ItemMeta meta = item.getItemMeta();
-        String title = e == Element.ANH_SANG ? "Ấn Thần Phạt" : "Ấn Lãnh Địa Bóng Tối";
+        String title;
+        switch (e) {
+            case ANH_SANG: title = "Ấn Thần Phạt"; break;
+            case RONG: title = "Ấn Hơi Thở Rồng"; break;
+            default: title = "Ấn Lãnh Địa Bóng Tối"; break;
+        }
         meta.setDisplayName(e.getColor() + "§l✦ " + title + " ✦");
         List<String> lore = new ArrayList<>();
         lore.add("§8Vật phẩm kỹ năng");
@@ -68,7 +77,7 @@ public class SkillItems {
     public boolean isBound(ItemStack item) {
         if (item == null) return false;
         Material t = item.getType();
-        if (t != Material.ECHO_SHARD && t != Material.NETHER_STAR) return false;
+        if (t != Material.ECHO_SHARD && t != Material.NETHER_STAR && t != Material.DRAGON_BREATH) return false;
         if (!item.hasItemMeta()) return false;
         return item.getItemMeta().getPersistentDataContainer().has(itemKey, PersistentDataType.STRING);
     }
@@ -85,12 +94,12 @@ public class SkillItems {
     }
 
     /**
-     * Đồng bộ: mỗi nguyên tố có chiêu (Bóng Tối, Ánh Sáng) đang trang bị ở BẤT KỲ ô nào
+     * Đồng bộ: mỗi nguyên tố có chiêu (Bóng Tối, Ánh Sáng, Rồng) đang trang bị ở BẤT KỲ ô nào
      * ứng với đúng 1 vật phẩm kỹ năng. Gỡ nguyên tố thì vật phẩm bị thu hồi.
      */
     public void sync(Player p) {
         Set<Element> want = EnumSet.noneOf(Element.class);
-        for (Element e : manager.getEffective(p)) {
+        for (Element e : manager.getEquipped(p)) {
             if (e.hasSkill()) want.add(e);
         }
         Set<Element> found = EnumSet.noneOf(Element.class);

@@ -24,16 +24,12 @@ performance:
 
 # ----------------------------------------------------------------------
 #  HỢP THỂ (FUSION) - kết hợp 2 nguyên tố thành 1
-#  Mở menu /nguyento, click vào hợp thể chưa mở khóa (hoặc /nguyento fuse <id>).
-#  Hợp thể chỉ chiếm 1 ô trang bị nhưng nhận buff + nội tại + chiêu của cả 2 nguyên tố gốc,
-#  cộng thêm buff & nội tại riêng ở mục elements bên dưới.
-#  Không thể trang bị hợp thể cùng nguyên tố gốc của nó (vì trùng nhau).
+#  Mở bằng /nguyento (nút Đe) hoặc /nguyento fusion. Click hợp thể 2 lần để xác nhận.
+#  Khi kết hợp, người chơi MẤT hai nguyên tố gốc và nhận hợp thể.
+#  Hợp thể là nguyên tố độc lập (chỉ chiếm 1 ô), chỉ nhận buff + nội tại riêng ở mục elements bên dưới.
 # ----------------------------------------------------------------------
 fusion:
   cost-levels: 0               # số cấp độ (level kinh nghiệm) tốn mỗi lần kết hợp. 0 = miễn phí
-  inherit-stats-percent: 100   # % buff chỉ số (máu, sát thương, tốc độ, giáp) của 2 nguyên tố gốc được giữ lại
-                               # khi nằm trong hợp thể. Hạ xuống (vd 60) nếu thấy hợp thể quá mạnh.
-                               # (nội tại và chiêu thức luôn giữ nguyên 100%)
 
 elements:
 
@@ -88,14 +84,16 @@ elements:
     dark-bonus-percent: 30   # +% sát thương khi nội tại kích hoạt
     # Chiêu: trang bị ở ô nào cũng được, nhận vật phẩm kỹ năng và chuột phải để dùng
     skill:
-      cooldown: 120          # hồi chiêu (giây)
+      cooldown: 90           # hồi chiêu (giây)
       duration: 10           # thời gian lãnh địa (giây)
       radius: 7              # bán kính lãnh địa (block)
+      height: 12             # chiều cao lãnh địa (block): kẻ địch bị khóa chân không thể chạy ra ngoài hay bay lên quá mức này
       owner-speed-amplifier: 1        # tăng tốc cho bản thân (0 = Speed I, 1 = Speed II)
       owner-bonus-damage: 1.5         # +sát thương trong lãnh địa
       owner-extra-lifesteal-percent: 15   # +% hút máu trong lãnh địa
       enemy-slow-amplifier: 1         # kẻ địch bị chậm (0 = Chậm I, 1 = Chậm II)
       enemy-nausea: 1                 # 1 = gây buồn nôn, 0 = tắt
+      enemy-darkness: 1               # 1 = người chơi bị khóa chân bị tối mắt (hiệu ứng Darkness), 0 = tắt
 
   # ---------------- ÁNH SÁNG (HUYỀN THOẠI) ----------------
   # (Bạn ghi "+15% sát thương nhận vào" -> mình hiểu là GIẢM 15% sát thương nhận vào.
@@ -111,92 +109,188 @@ elements:
       duration-seconds: 15           # lá chắn tồn tại tối đa (giây)
     # Chiêu cuối Thần Phạt: trang bị ở ô nào cũng được, nhận vật phẩm kỹ năng và chuột phải để dùng
     skill:
-      cooldown: 120
-      radius: 10
-      damage: 70
-      cast-delay-ticks: 20           # thời gian báo trước (20 tick = 1 giây), 0 = đánh ngay
+      cooldown: 90
+      pillars: 3                     # số cột ánh sáng (ưu tiên giáng xuống kẻ địch gần nhất, thiếu thì xếp phía trước)
+      damage: 35                     # sát thương MỖI cột
+      radius: 3                      # bán kính mỗi cột (block)
+      range: 28                      # tầm tìm kẻ địch (block)
+      cast-delay-ticks: 30           # thời gian báo trước (20 tick = 1 giây)
+      stagger-ticks: 6               # các cột giáng xuống lệch nhau bấy nhiêu tick (cho đẹp)
 
-  # ---------------- RỒNG (nguyên tố mới, nguyên liệu của Thánh Long / Hắc Long) ----------------
+  # ---------------- RỒNG (HUYỀN THOẠI) ----------------
   rong:
     damage: 2
     max-health: 4
     armor-percent: 10
-    breath-chance: 12        # % phun Hơi Thở Rồng khi tấn công
-    breath-damage: 4         # sát thương lan
-    breath-radius: 3         # bán kính (block)
+    # Chiêu Hơi Thở Rồng: trang bị ở ô nào cũng được, nhận vật phẩm kỹ năng và chuột phải để dùng
+    skill:
+      cooldown: 90
+      duration: 10                   # thời gian vùng hơi thở (giây)
+      radius: 20                     # bán kính vùng hơi thở quanh vị trí tung chiêu (block)
+      damage-per-second: 10          # sát thương mỗi giây cho mọi kẻ địch trong vùng
 
   # ======================= HỢP THỂ =======================
+  # Mỗi hợp thể là nguyên tố độc lập: chỉ có buff và nội tại ghi dưới đây.
+  # guard = khiên tự kích hoạt khi máu xuống dưới ngưỡng (health-threshold-percent), hồi chiêu = cooldown (giây).
 
-  # ---------------- PLASMA = LỬA + SÉT ----------------
-  plasma:
-    damage: 1
+  # ---------------- FIRE WATER = LỬA + NƯỚC ----------------
+  fire_water:
+    damage: 2
+    max-health: 4
     attack-speed-percent: 5
-    max-health: 2
-    plasma-chance: 15        # % gây Bùng Nổ Plasma
-    plasma-damage: 5
-    plasma-radius: 3
-    plasma-ignite-seconds: 3
+    steam-chance: 15               # % tạo vụ nổ hơi nước khi tấn công
+    steam-damage: 5                # sát thương phép của vụ nổ
+    steam-radius: 3
+    steam-slow-seconds: 2          # Giảm Tốc I
+    steam-burn-bonus-percent: 30   # mục tiêu đang Thiêu Đốt: vụ nổ +30% sát thương
+    steam-stun-chance: 10          # mục tiêu đang Ướt: % bị Choáng
+    steam-stun-seconds: 0.5
+    steam-wet-seconds: 6           # kẻ địch dính hơi nước bị đánh dấu Ướt trong bấy nhiêu giây
+    guard:
+      health-threshold-percent: 20 # máu dưới 20% -> màn sương
+      reduction-percent: 20
+      seconds: 3
+      cooldown: 60
+
+  # ---------------- BÃO CÁT = ĐẤT + GIÓ ----------------
+  bao_cat:
+    armor-percent: 30
+    max-health: 6
+    attack-speed-percent: 10
+    speed-percent: 20
+    sand-chance: 15                # % tạo cơn bão cát nhỏ quanh mục tiêu
+    sand-damage: 4
+    sand-radius: 4
+    sand-slow-percent: 30          # Giảm tốc (Slowness mỗi cấp = 15%, tự làm tròn)
+    sand-slow-seconds: 2
+    sand-knockup-chance: 10        # % hất tung nhẹ mỗi kẻ địch trúng
+    sand-multi-count: 3            # trúng từ bấy nhiêu mục tiêu trở lên ...
+    sand-speed-bonus-percent: 15   # ... nhận +15% tốc độ di chuyển ...
+    sand-speed-seconds: 3          # ... trong 3 giây
+    guard:
+      health-threshold-percent: 30 # máu dưới 30% -> Khiên Cát
+      reduction-percent: 20
+      seconds: 3
+      cooldown: 45
+
+  # ---------------- HÀN LÔI = SÉT + BĂNG ----------------
+  han_loi:
+    damage: 3
+    max-health: 4
+    attack-speed-percent: 5
+    speed-percent: 5
+    bolt-chance: 15                # % triệu hồi tia sét băng
+    bolt-damage: 5                 # sát thương sét
+    frost-damage: 3                # sát thương băng (cộng với sát thương sét)
+    slow-percent: 35               # Chậm 35% (Slowness mỗi cấp = 15% nên áp dụng gần nhất: Chậm II = 30%)
+    slow-seconds: 2
+    freeze-chance: 25              # nếu mục tiêu đang bị Chậm: % Đóng Băng
+    freeze-seconds: 0.8
+    shatter-bonus-percent: 40      # đánh mục tiêu đang Đóng Băng: phá băng, +40% sát thương
+    guard:
+      health-threshold-percent: 25 # máu dưới 25% -> Lôi Băng Hộ Thể
+      reduction-percent: 20
+      seconds: 4
+      cooldown: 30
+
+  # ---------------- LÔI VIÊM = LỬA + SÉT ----------------
+  loi_viem:
+    damage: 4
+    max-health: 4
+    speed-percent: 10
+    strike-chance: 15              # % tạo Lôi Viêm lên mục tiêu (Thiên Hỏa Lôi Bạo)
+    fire-damage: 3                 # sát thương lửa
+    lightning-damage: 4            # sát thương sét
+    burn-seconds: 3                # Thiêu Đốt
+    static-seconds: 2              # Nhiễm Điện
+    burst-bonus-percent: 50        # mục tiêu có cả 2 hiệu ứng: Bộc Phát +50% sát thương
+    burst-targets: 3               # vụ nổ lan sang tối đa bấy nhiêu kẻ địch ...
+    burst-radius: 4                # ... trong bán kính này (block)
+    burst-spread-percent: 100      # sát thương lan = % sát thương Bộc Phát
+    burst-cooldown: 5              # hồi chiêu của Bộc Phát (giây)
 
   # ---------------- BĂNG THỦY = NƯỚC + BĂNG ----------------
   bang_thuy:
-    max-health: 4
-    speed-percent: 5
-    freeze-chance: 12        # % đóng băng mục tiêu
+    damage: 2
+    max-health: 5
+    speed-percent: 8
+    freeze-chance: 12              # % đóng băng mục tiêu
     freeze-seconds: 2
-    freeze-amplifier: 4      # 4 = Chậm V (gần như đứng yên)
+    freeze-amplifier: 4            # 4 = Chậm V (gần như đứng yên)
     freeze-damage: 3
 
   # ---------------- THÁNH LONG = ÁNH SÁNG + RỒNG ----------------
   thanh_long:
-    damage: 2
-    max-health: 4
-    smite-chance: 12         # % giáng Phán Quyết Thánh Long
-    smite-damage: 6
-    smite-heal: 2            # máu hồi cho bản thân (2 = 1 tim)
+    damage: 4
+    max-health: 6
+    armor-percent: 20
+    damage-reduction-percent: 10   # giảm 10% sát thương nhận vào (luôn có)
+    soul-chance: 15                # % triệu hồi Long Hồn Ánh Sáng (Thánh Long Giáng Thế)
+    soul-damage: 8                 # sát thương Ánh Sáng + Rồng
+    mark-seconds: 5                # Thánh Ấn
+    holy-bonus-percent: 35         # đánh mục tiêu có Thánh Ấn: +35% sát thương
+    holy-consume-mark: 0           # 1 = Thánh Ấn biến mất sau khi bị đánh trúng
+    guard:
+      health-threshold-percent: 30 # máu dưới 30% -> Long Hộ
+      reduction-percent: 25
+      speed-percent: 15
+      seconds: 5
+      cooldown: 45
 
   # ---------------- HẮC LONG = BÓNG TỐI + RỒNG ----------------
   hac_long:
-    damage: 3
-    max-health: 2
-    curse-chance: 12         # % giáng Lời Nguyền Hắc Long
-    curse-damage: 5
-    curse-seconds: 4         # thời gian héo mòn (Wither II)
+    damage: 4
+    max-health: 6
+    lifesteal-percent: 20          # hút máu 20% sát thương gây ra
+    soul-chance: 15                # % triệu hồi Hắc Long Hồn (Hắc Long Thôn Phệ)
+    soul-damage: 8                 # sát thương Rồng + Bóng Tối
+    mark-seconds: 5                # Hắc Ấn
+    devour-bonus-percent: 40       # đánh mục tiêu có Hắc Ấn: Thôn Phệ +40% sát thương ...
+    devour-heal-percent: 5         # ... và hồi 5% máu tối đa
+    devour-consume-mark: 0         # 1 = Hắc Ấn biến mất sau khi bị Thôn Phệ
+    guard:
+      health-threshold-percent: 25 # máu dưới 25% -> Hắc Long Hộ Thể
+      reduction-percent: 30
+      damage-percent: 20           # +20% sát thương gây ra
+      seconds: 5
+      cooldown: 45
 
   # ---------------- DUNG NHAM = LỬA + ĐẤT ----------------
   dung_nham:
-    damage: 1
-    max-health: 4
-    armor-percent: 10
-    magma-chance: 12         # % Dung Nham Phun Trào
+    damage: 3
+    max-health: 5
+    armor-percent: 15
+    magma-chance: 12
     magma-damage: 5
     magma-radius: 3
     magma-ignite-seconds: 4
 
   # ---------------- BÃO TỐ = GIÓ + SÉT ----------------
   bao_to:
-    damage: 1
-    speed-percent: 5
+    damage: 3
+    max-health: 4
+    speed-percent: 8
     attack-speed-percent: 8
-    storm-chance: 14         # % Cơn Bão Sét (hất tung kẻ địch)
+    storm-chance: 14               # Cơn Bão Sét (hất tung kẻ địch)
     storm-damage: 4
     storm-radius: 3
 
   # ---------------- BÃO TUYẾT = GIÓ + BĂNG ----------------
   bao_tuyet:
-    damage: 1
-    max-health: 2
+    damage: 3
+    max-health: 4
     speed-percent: 8
-    blizzard-chance: 12      # % Bão Tuyết
+    blizzard-chance: 12
     blizzard-damage: 3
     blizzard-radius: 4
     blizzard-seconds: 3
-    blizzard-amplifier: 2    # 2 = Chậm III
+    blizzard-amplifier: 2          # 2 = Chậm III
 
   # ---------------- VIÊM LONG = LỬA + RỒNG ----------------
   viem_long:
-    damage: 3
-    max-health: 2
-    inferno-chance: 12       # % Long Viêm Thiêu Đốt
+    damage: 4
+    max-health: 5
+    inferno-chance: 12
     inferno-damage: 7
     inferno-radius: 4
     inferno-ignite-seconds: 5
