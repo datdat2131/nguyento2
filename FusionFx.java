@@ -444,7 +444,7 @@ public final class FusionFx {
                 Vfx.helix(pw, base, r, 2.2, t * 0.4 + Math.PI, 1, b, b, parts.size() > 1 ? parts.get(1).getParticle() : null);
                 if (t >= 20) {
                     Location c = base.clone().add(0, 1, 0);
-                    pVfx.flash(w, c);
+                    Vfx.flash(w, c);
                     pw.spawnParticle(f.getParticle(), c, Vfx.pts(80, 30), 0.6, 0.9, 0.6, 0.2);
                     Vfx.dustRing(pw, base, 2.0, 0.1, Vfx.pts(32, 14), 0, m, 1.8f);
                     Vfx.dustRing(pw, base, 3.0, 0.1, Vfx.pts(40, 16), 0.3, m, 1.5f);

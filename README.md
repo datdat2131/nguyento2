@@ -2,7 +2,7 @@
 
 ## Build
 Cần JDK 17+ và Maven:  `mvn clean package`  ->  `target/NguyenTo.jar` bỏ vào `plugins/`.
-(Hoặc đẩy lên GitHub, tab Actions sẽ tự build - xem .github/workflows/build.yml)
+(Hoặc đẩy lên GitHub, tab Actions sẽ tự build - xem .github/workflows/main.yml)
 
 ## Nguyên tố
 Lửa, Nước, Đất, Gió, Sét, Băng + 3 nguyên tố HUYỀN THOẠI: Bóng Tối, Ánh Sáng, Rồng.
