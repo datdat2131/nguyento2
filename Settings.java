@@ -128,7 +128,7 @@ public class Settings {
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "armor-percent", "+{v}% giáp");
                 skills.add("Hơi Thở Rồng: chuột phải vật phẩm kỹ năng (trang bị ở ô nào cũng được)");
-                skills.add("Tạo vùng hơi thở rồng bán kính " + f(n(e, "skill.radius")) + " block, gây "
+                skills.add("Triệu hồi " + f(n(e, "skill.heads")) + " đầu rồng bay quanh, tạo vùng hơi thở bán kính " + f(n(e, "skill.radius")) + " block, gây "
                         + f(n(e, "skill.damage-per-second")) + " sát thương mỗi giây trong " + f(n(e, "skill.duration")) + "s");
                 skills.add("Hồi chiêu " + f(n(e, "skill.cooldown")) + "s");
                 break;

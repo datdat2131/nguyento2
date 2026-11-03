@@ -128,6 +128,7 @@ elements:
       duration: 10                   # thời gian vùng hơi thở (giây)
       radius: 20                     # bán kính vùng hơi thở quanh vị trí tung chiêu (block)
       damage-per-second: 10          # sát thương mỗi giây cho mọi kẻ địch trong vùng
+      heads: 5                       # số đầu rồng bay vòng quanh vùng (1-8, chỉ là hiệu ứng hình ảnh)
 
   # ======================= HỢP THỂ =======================
   # Mỗi hợp thể là nguyên tố độc lập: chỉ có buff và nội tại ghi dưới đây.

@@ -1,8 +1,8 @@
-# NguyenTo 1.4 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
+# NguyenTo 1.5 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
 
 ## Build
 Cần JDK 17+ và Maven:  `mvn clean package`  ->  `target/NguyenTo.jar` bỏ vào `plugins/`.
-(Hoặc đẩy lên GitHub, tab Actions sẽ tự build - xem .github/workflows/main.yml)
+(Hoặc đẩy lên GitHub, tab Actions sẽ tự build - xem .github/workflows/build.yml)
 
 ## Nguyên tố
 Lửa, Nước, Đất, Gió, Sét, Băng + 3 nguyên tố HUYỀN THOẠI: Bóng Tối, Ánh Sáng, Rồng.
@@ -38,9 +38,9 @@ Toàn bộ con số chỉnh trong `config.yml` (mục `elements.<id>`), phí k�
 Mọi buff / nội tại hoạt động ở cả 3 ô. Bóng Tối / Ánh Sáng / Rồng trang bị ở ô nào cũng được
 nhận 1 vật phẩm kỹ năng (trang bị nhiều nguyên tố có chiêu thì nhận nhiều vật phẩm). Chuột phải để dùng chiêu.
 Cả 3 chiêu đều hồi 90 giây:
-- **Ánh Sáng - Thần Phạt**: 3 cột ánh sáng giáng xuống 3 kẻ địch gần nhất, mỗi cột 35 sát thương (bán kính 3 block).
-- **Bóng Tối - Lãnh Địa**: lãnh địa 10 giây, kẻ địch bên trong bị KHÓA CHÂN, không chạy ra ngoài được (kể cả ngọc ender / chorus).
-- **Rồng - Hơi Thở Rồng**: vùng hơi thở bán kính 20 block, 10 sát thương mỗi giây trong 10 giây.
+- **Ánh Sáng - Thần Phạt**: cánh thiên thần + hào quang, mỗi cột có ngôi sao tụ năng lượng và vòng ma pháp trên trời; 3 cột ánh sáng giáng xuống 3 kẻ địch gần nhất, mỗi cột 35 sát thương (bán kính 3 block), tỏa tia nắng và để lại vầng sáng thánh.
+- **Bóng Tối - Lãnh Địa**: lãnh địa 10 giây, kẻ địch bên trong bị KHÓA CHÂN, không chạy ra ngoài được (kể cả ngọc ender / chorus). Có hố đen trên cao, sọ ma bay vòng, sét bóng tối, xích nối kẻ bị khóa với hố đen và gai bóng tối đâm lên dưới chân.
+- **Rồng - Hơi Thở Rồng**: vùng hơi thở bán kính 20 block, 10 sát thương mỗi giây trong 10 giây. 5 đầu rồng khổng lồ lao xuống rồi bay vòng nhiều tầng, phun lửa xuống đất, cột lửa rồng ở tâm và mặt đất phun trào.
 Vật phẩm bất ly thân: không vứt được, không cất vào rương/ender chest/bàn chế tạo/bundle/
 khung vật phẩm, người khác không nhặt hay dùng được, chết không rơi ra.
 Gỡ nguyên tố thì vật phẩm tự biến mất.

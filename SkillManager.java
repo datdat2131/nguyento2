@@ -11,6 +11,7 @@ import org.bukkit.World;
 import org.bukkit.entity.AnimalTamer;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.BlockDisplay;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.LivingEntity;
@@ -71,6 +72,8 @@ public class SkillManager implements Listener {
         final List<Spire> spires = new ArrayList<>();
         BlockDisplay coreA;
         BlockDisplay coreB;
+        /** Những chiếc sọ ma bay vòng trong lãnh địa. */
+        final List<ItemDisplay> skulls = new ArrayList<>();
 
         Domain(Location center, double radius, double height) {
             this.center = center;
@@ -81,8 +84,12 @@ public class SkillManager implements Listener {
 
     private static class Breath {
         BukkitTask task;
-        ItemDisplay head;
+        /** Các đầu rồng bay quanh vùng hơi thở. */
+        final List<ItemDisplay> heads = new ArrayList<>();
     }
+
+    private static final double[] HEAD_ORBIT = {0.78, 0.55, 0.38, 0.68, 0.28, 0.9, 0.46, 0.6};
+    private static final double[] HEAD_HEIGHT = {12, 9, 7, 10.5, 6, 14, 8, 11};
 
     private final NguyenToPlugin plugin;
     private final ElementManager manager;
@@ -189,11 +196,12 @@ public class SkillManager implements Listener {
             for (Spire s : d.spires) Vfx.remove(s.display);
             Vfx.remove(d.coreA);
             Vfx.remove(d.coreB);
+            for (ItemDisplay sk : d.skulls) Vfx.remove(sk);
         }
         domains.clear();
         for (Breath b : new ArrayList<>(breaths.values())) {
             if (b.task != null) b.task.cancel();
-            Vfx.remove(b.head);
+            for (ItemDisplay h : b.heads) Vfx.remove(h);
         }
         breaths.clear();
     }
@@ -323,6 +331,9 @@ public class SkillManager implements Listener {
         Location top = new Location(w, cx, cy + 9.0, cz);
         d.coreA = Vfx.block(w, top, Material.BLACK_CONCRETE, cube(0.01f, new Quaternionf()));
         d.coreB = Vfx.block(w, top, Material.PURPLE_STAINED_GLASS, cube(0.01f, new Quaternionf()));
+        for (int i = 0; i < 6; i++) {
+            d.skulls.add(Vfx.item(w, new Location(w, cx, cy + 3.0, cz), Material.WITHER_SKELETON_SKULL, 2.4f));
+        }
         final BlockDisplay a = d.coreA;
         final BlockDisplay b = d.coreB;
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -337,6 +348,114 @@ public class SkillManager implements Listener {
                 b.setTransformation(cube(2.6f, new Quaternionf().rotateX(0.6155f).rotateZ(0.7854f)));
             }
         }, 4L);
+    }
+
+    private void animateSkulls(Domain d, int ticks) {
+        int n = d.skulls.size();
+        if (n == 0) return;
+        World w = d.center.getWorld();
+        double cx = d.center.getX(), cy = d.center.getY(), cz = d.center.getZ();
+        double orbit = d.radius * 0.72;
+        for (int i = 0; i < n; i++) {
+            ItemDisplay sk = d.skulls.get(i);
+            if (!sk.isValid()) continue;
+            double ang = i * 2 * Math.PI / n + ticks * 0.05;
+            double y = cy + 2.2 + Math.sin(ticks * 0.12 + i * 1.3) * 0.8;
+            Location pos = new Location(w, cx + Math.cos(ang) * orbit, y, cz + Math.sin(ang) * orbit);
+            Location facing = pos.clone();
+            facing.setDirection(new Vector(-Math.sin(ang), 0, Math.cos(ang)));
+            sk.teleport(facing);
+            if (ticks % 6 == 0) {
+                w.spawnParticle(Particle.SQUID_INK, pos, 2, 0.2, 0.2, 0.2, 0.01);
+                w.spawnParticle(Particle.SOUL, pos, 1, 0.2, 0.2, 0.2, 0.01);
+                for (int k = 1; k <= 6; k++) {
+                    double a2 = ang - k * 0.09;
+                    Vfx.dustAt(w, cx + Math.cos(a2) * orbit, y, cz + Math.sin(a2) * orbit,
+                            Color.fromRGB(90, 0, 140), Math.max(1.0f, 2.2f - k * 0.2f));
+                }
+            }
+        }
+        if (ticks % 40 == 0) w.playSound(d.center, Sound.ENTITY_VEX_CHARGE, 1.0f, 0.5f);
+    }
+
+    /** Hố đen trên cao, sét bóng tối, xích + gông chân + gai bóng tối trồi lên dưới chân kẻ bị khóa. */
+    private void darkExtras(Player owner, Domain d, int ticks) {
+        if (!Vfx.on()) return;
+        World w = d.center.getWorld();
+        double cx = d.center.getX(), cy = d.center.getY(), cz = d.center.getZ();
+        double r = d.radius;
+        Color purple = Color.fromRGB(120, 0, 190);
+        Color black = Color.fromRGB(15, 0, 25);
+        Location core = new Location(w, cx, cy + 9.0, cz);
+        double rot = ticks * 0.18;
+
+        // hố đen: dòng vật chất xoáy tụ vào lõi
+        for (int arm = 0; arm < 3; arm++) {
+            for (int k = 0; k < 14; k++) {
+                double t01 = k / 14.0;
+                double rr = 7.5 * (1.0 - t01) + 0.6;
+                double a = rot + arm * 2 * Math.PI / 3 + t01 * 5.0;
+                Vfx.dustAt(w, cx + Math.cos(a) * rr, core.getY() + Math.sin(a * 2) * 0.3, cz + Math.sin(a) * rr,
+                        k % 2 == 0 ? purple : black, 1.5f);
+            }
+        }
+        w.spawnParticle(Particle.PORTAL, core, 20, 0.5, 0.5, 0.5, 1.0);
+        w.spawnParticle(Particle.SOUL_FIRE_FLAME, core, 4, 0.5, 0.5, 0.5, 0.02);
+        Vfx.dustRing(w, new Location(w, cx, cy + 14.0, cz), r * 0.9, 0, Vfx.pts((int) (r * 4), 16), -ticks * 0.09, purple, 1.4f);
+
+        // sét bóng tối từ lõi giáng xuống các tinh thể
+        if (ticks % 18 == 0 && !d.spires.isEmpty()) {
+            Spire s = d.spires.get(rnd.nextInt(d.spires.size()));
+            if (s.display.isValid()) {
+                Location top = s.display.getLocation().clone().add(0, 4, 0);
+                Vfx.bolt(w, core, top, purple, black, Particle.SOUL_FIRE_FLAME);
+                w.playSound(top, Sound.ENTITY_LIGHTNING_BOLT_IMPACT, 0.5f, 0.6f);
+            }
+        }
+
+        // xích bóng tối nối lõi với từng kẻ bị khóa + vòng gông chân + gai bóng tối
+        int shown = 0;
+        for (UUID id : new ArrayList<>(d.locked)) {
+            if (shown >= 8) break;
+            Entity ent = Bukkit.getEntity(id);
+            if (!(ent instanceof LivingEntity) || !ent.isValid()) continue;
+            Location feet = ent.getLocation();
+            Vfx.line(w, core, feet.clone().add(0, 1.0, 0), 0.6, purple, 1.2f, Particle.SOUL_FIRE_FLAME);
+            Vfx.dustRing(w, feet, 0.75, 0.15, 10, ticks * 0.2, black, 1.3f);
+            Vfx.dustRing(w, feet, 0.75, 0.35, 10, -ticks * 0.2, purple, 1.1f);
+            if (ticks % 30 == 0 && shown < 4) spawnSpikes(w, feet);
+            shown++;
+        }
+    }
+
+    /** Vòng gai tinh thể bóng tối đâm lên dưới chân mục tiêu rồi thụt xuống (chỉ là hiệu ứng, không gây sát thương). */
+    private void spawnSpikes(World w, Location base) {
+        w.playSound(base, Sound.BLOCK_DEEPSLATE_BREAK, 1.0f, 0.5f);
+        Vfx.blockBurst(w, base.clone().add(0, 0.2, 0), Material.OBSIDIAN, Vfx.pts(14, 6), 0.5);
+        final int n = 6;
+        for (int i = 0; i < n; i++) {
+            final double a = 2 * Math.PI * i / n + rnd.nextDouble() * 0.4;
+            final double x = base.getX() + Math.cos(a) * 1.1;
+            final double z = base.getZ() + Math.sin(a) * 1.1;
+            final float wd = 0.3f;
+            final float h = 1.6f + rnd.nextFloat() * 1.2f;
+            final Quaternionf tilt = new Quaternionf().rotateY((float) -a).rotateZ(-0.35f);
+            final BlockDisplay bd = Vfx.block(w, new Location(w, x, base.getY() - 0.2, z), Material.CRYING_OBSIDIAN,
+                    new Transformation(new Vector3f(0f, 0f, 0f), tilt, new Vector3f(wd, 0.05f, wd), new Quaternionf()));
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (!bd.isValid()) return;
+                bd.setInterpolationDelay(0);
+                bd.setInterpolationDuration(3);
+                bd.setTransformation(new Transformation(new Vector3f(0f, 0f, 0f), tilt, new Vector3f(wd, h, wd), new Quaternionf()));
+            }, 1L);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (!bd.isValid()) return;
+                bd.setInterpolationDelay(0);
+                bd.setInterpolationDuration(6);
+                bd.setTransformation(new Transformation(new Vector3f(0f, 0f, 0f), tilt, new Vector3f(wd, 0.02f, wd), new Quaternionf()));
+            }, 24L);
+            Vfx.removeLater(bd, 32L);
+        }
     }
 
     private void animateCore(Domain d, int ticks) {
@@ -375,6 +494,8 @@ public class SkillManager implements Listener {
             }
             Vfx.removeLater(core, 12L);
         }
+        for (ItemDisplay sk : d.skulls) Vfx.remove(sk);
+        d.skulls.clear();
         if (announce) {
             if (p.isOnline()) Fx.actionBar(p, "§5Lãnh địa bóng tối đã tan biến.");
             d.center.getWorld().playSound(d.center, Sound.BLOCK_BEACON_DEACTIVATE, 0.8f, 0.5f);
@@ -411,8 +532,9 @@ public class SkillManager implements Listener {
         }
         enforceLock(owner, d, ticks);
 
-        // --- lõi hắc ám xoay ---
+        // --- lõi hắc ám xoay + sọ ma bay vòng ---
         if (ticks % 10 == 0) animateCore(d, ticks);
+        animateSkulls(d, ticks);
 
         // --- hiệu ứng lên người + hình ảnh (mỗi 6 tick) ---
         if (ticks % 6 != 0) return;
@@ -445,6 +567,8 @@ public class SkillManager implements Listener {
                         1, 0, 0.02, 0, 0.01);
             }
         }
+
+        darkExtras(owner, d, ticks);
 
         int ownerSpeed = (int) settings.n(el, "skill.owner-speed-amplifier");
         int enemySlow = (int) settings.n(el, "skill.enemy-slow-amplifier");
@@ -578,25 +702,133 @@ public class SkillManager implements Listener {
         p.sendTitle("§6§l✦ THẦN PHẠT ✦", "§eBa cột ánh sáng phán xét tất cả!", 3, 30, 10);
         w.playSound(p.getLocation(), Sound.BLOCK_BEACON_POWER_SELECT, 2f, 1.4f);
         w.playSound(p.getLocation(), Sound.BLOCK_BELL_RESONATE, 1.5f, 1.2f);
+        haloWings(p);
 
         for (int i = 0; i < spots.size(); i++) {
             final Location spot = spots.get(i);
             final int strikeAt = delay + i * stagger;
             new BukkitRunnable() {
                 int t = 0;
+                ItemDisplay star = null;
+
+                private void clearStar() {
+                    if (star != null) Vfx.remove(star);
+                    star = null;
+                }
 
                 @Override
                 public void run() {
-                    if (t >= strikeAt) {
+                    if (!p.isOnline()) {
+                        clearStar();
                         cancel();
-                        if (p.isOnline()) lightStrike(p, spot, radius, damage);
+                        return;
+                    }
+                    if (t >= strikeAt) {
+                        clearStar();
+                        cancel();
+                        lightStrike(p, spot, radius, damage);
                         return;
                     }
                     telegraph(spot, radius, t, strikeAt);
+                    star = skySigil(spot, t, strikeAt, star);
                     t += 2;
                 }
             }.runTaskTimer(plugin, 0L, 2L);
         }
+    }
+
+    /** Cánh thiên thần + vầng hào quang quanh người tung chiêu. */
+    private void haloWings(Player p) {
+        if (!Vfx.on()) return;
+        final Color gold = Color.fromRGB(255, 215, 0);
+        final Color white = Color.fromRGB(255, 255, 235);
+        new BukkitRunnable() {
+            int t = 0;
+
+            @Override
+            public void run() {
+                if (!p.isOnline() || p.isDead() || t >= 40) {
+                    cancel();
+                    return;
+                }
+                Location l = p.getLocation();
+                World w = l.getWorld();
+                double yaw = Math.toRadians(l.getYaw());
+                Vector fwd = new Vector(-Math.sin(yaw), 0, Math.cos(yaw));
+                Vector right = new Vector(-Math.cos(yaw), 0, -Math.sin(yaw));
+                Vfx.dustRing(w, l, 0.55, 2.35, 14, t * 0.3, gold, 1.2f);
+                double flap = Math.sin(t * 0.35) * 0.18;
+                Location base = l.clone().add(0, 1.35, 0).subtract(fwd.clone().multiply(0.25));
+                for (int side = -1; side <= 1; side += 2) {
+                    for (int i = 0; i < 7; i++) {
+                        double a = 0.25 + i * 0.2 + flap;
+                        double len = 2.8 - i * 0.22;
+                        Vector dir = right.clone().multiply(side * Math.cos(a))
+                                .add(new Vector(0, Math.sin(a), 0))
+                                .subtract(fwd.clone().multiply(0.35)).normalize();
+                        Location end = base.clone().add(dir.multiply(len));
+                        Vfx.line(w, base, end, 0.35, i % 2 == 0 ? white : gold, 1.1f, null);
+                    }
+                }
+                w.spawnParticle(Particle.END_ROD, l.getX(), l.getY() + 1.5, l.getZ(), 3, 0.6, 0.8, 0.6, 0.02);
+                t += 2;
+            }
+        }.runTaskTimer(plugin, 0L, 2L);
+    }
+
+    /** Ngôi sao ánh sáng tụ năng lượng trên trời phía trên mỗi cột + vòng ma pháp trên không. */
+    private ItemDisplay skySigil(Location spot, int t, int strikeAt, ItemDisplay star) {
+        if (!Vfx.on()) return star;
+        World w = spot.getWorld();
+        double prog = Math.min(1.0, (double) t / strikeAt);
+        Location sky = spot.clone().add(0, 16, 0);
+        if (star == null) {
+            star = Vfx.item(w, sky, Material.NETHER_STAR, 0.5f);
+            star.setBillboard(Display.Billboard.CENTER);
+        }
+        if (star.isValid()) {
+            float sc = (float) (0.6 + 3.6 * prog);
+            star.setInterpolationDelay(0);
+            star.setInterpolationDuration(2);
+            star.setTransformation(new Transformation(new Vector3f(0f, 0f, 0f), new Quaternionf().rotateZ(t * 0.2f),
+                    new Vector3f(sc, sc, sc), new Quaternionf()));
+        }
+        Color gold = Color.fromRGB(255, 215, 0);
+        Color white = Color.fromRGB(255, 250, 220);
+        Vfx.dustRing(w, sky, 2.0 + 2.5 * prog, 0, Vfx.pts(24, 10), t * 0.15, gold, 1.5f);
+        if (t % 4 == 0) {
+            Vfx.star(w, sky, 3.0 + prog, 0, -t * 0.1, 6, white, 1.2f);
+            Vfx.line(w, sky, spot.clone().add(0, 1, 0), 0.9, Color.fromRGB(255, 235, 150), 1.0f, Particle.END_ROD);
+        }
+        w.spawnParticle(Particle.END_ROD, sky, 3, 0.6, 0.6, 0.6, 0.02);
+        return star;
+    }
+
+    /** Tia nắng tỏa ra mặt đất + vầng sáng thánh còn lại sau khi cột giáng xuống. */
+    private void sunburst(Location spot, double radius) {
+        final World w = spot.getWorld();
+        final Color gold = Color.fromRGB(255, 215, 0);
+        final Color white = Color.fromRGB(255, 255, 235);
+        Location c = spot.clone().add(0, 0.12, 0);
+        for (int i = 0; i < 12; i++) {
+            double a = 2 * Math.PI * i / 12;
+            Location end = c.clone().add(Math.cos(a) * radius * 2.6, 0, Math.sin(a) * radius * 2.6);
+            Vfx.line(w, c, end, 0.45, i % 2 == 0 ? gold : white, 1.4f, Particle.END_ROD);
+        }
+        Vfx.fallingDust(w, spot.clone().add(0, 9, 0), Material.GLOWSTONE, Vfx.pts(24, 10), radius, 4.0, radius);
+        new BukkitRunnable() {
+            int t = 0;
+
+            @Override
+            public void run() {
+                t += 2;
+                double rr = radius * (0.85 + 0.15 * Math.sin(t * 0.5));
+                Vfx.dustRing(w, spot, rr, 0.12, Vfx.pts((int) (rr * 8) + 8, 10), t * 0.2, gold, 1.3f);
+                w.spawnParticle(Particle.END_ROD, spot.getX() + (rnd.nextDouble() - 0.5) * radius * 2, spot.getY() + 0.2,
+                        spot.getZ() + (rnd.nextDouble() - 0.5) * radius * 2, 2, 0.1, 0.8, 0.1, 0.02);
+                if (t >= 40) cancel();
+            }
+        }.runTaskTimer(plugin, 0L, 2L);
     }
 
     /** Chọn vị trí các cột: ưu tiên kẻ địch gần nhất; thiếu thì xếp thành hình quạt phía trước người dùng. */
@@ -681,6 +913,7 @@ public class SkillManager implements Listener {
             Vfx.removeLater(core, 32L);
 
             Vfx.flash(w, spot.clone().add(0, 1, 0));
+            sunburst(spot, radius);
             for (double y = 0; y < 40; y += 2) {
                 w.spawnParticle(Particle.END_ROD, spot.getX(), spot.getY() + y, spot.getZ(), 4, 0.25, 0.4, 0.25, 0.02);
             }
@@ -729,7 +962,8 @@ public class SkillManager implements Listener {
         Breath b = breaths.remove(p.getUniqueId());
         if (b == null) return;
         if (b.task != null) b.task.cancel();
-        Vfx.remove(b.head);
+        for (ItemDisplay h : b.heads) Vfx.remove(h);
+        b.heads.clear();
     }
 
     private void castBreath(Player p) {
@@ -751,7 +985,12 @@ public class SkillManager implements Listener {
         w.playSound(center, Sound.ENTITY_WITHER_SPAWN, 1.0f, 0.5f);
 
         final Breath b = new Breath();
-        if (vis) b.head = Vfx.item(w, center.clone().add(radius * 0.55, 9, 0), Material.DRAGON_HEAD, 7.0f);
+        final int headCount = Math.max(1, Math.min(8, (int) cfg(el, "skill.heads", 5)));
+        if (vis) {
+            for (int i = 0; i < headCount; i++) {
+                b.heads.add(Vfx.item(w, center.clone().add(0, 40, 0), Material.DRAGON_HEAD, 5.5f + (i % 2) * 1.5f));
+            }
+        }
         breaths.put(p.getUniqueId(), b);
 
         b.task = new BukkitRunnable() {
@@ -836,29 +1075,72 @@ public class SkillManager implements Listener {
                 Vfx.dustAt(w, x, Vfx.groundY(w, x, z, cy) + 0.5, z, arm % 2 == 0 ? violet : ember, 1.6f);
             }
         }
-        // rồng khổng lồ bay vòng quanh vùng
-        if (b.head != null && b.head.isValid()) {
-            double orbit = radius * 0.55;
-            double ang = t * 0.045;
-            double hy = cy + 9 + Math.sin(t * 0.1) * 1.2;
-            Location pos = new Location(w, cx + Math.cos(ang) * orbit, hy, cz + Math.sin(ang) * orbit);
-            Vector tangent = new Vector(-Math.sin(ang), -Math.cos(t * 0.1) * 0.05, Math.cos(ang));
-            Location facing = pos.clone();
-            facing.setDirection(tangent);
-            b.head.teleport(facing);
-            // thân và đuôi uốn lượn phía sau
-            for (int k = 1; k <= 22; k++) {
-                double a2 = ang - k * 0.075;
-                double yy = cy + 9 + Math.sin((t - k * 2) * 0.1) * 1.2 + Math.sin(k * 0.5 + t * 0.2) * 0.5;
-                Vfx.dustAt(w, cx + Math.cos(a2) * orbit, yy, cz + Math.sin(a2) * orbit,
-                        k % 2 == 0 ? red : violet, Math.max(1.1f, 3.0f - k * 0.08f));
+        // trung tâm: cột lửa rồng vút lên trời
+        if (t % 4 == 0) {
+            for (int y = 0; y <= 16; y += 2) {
+                double spread = 1.4 * (1.0 - y / 22.0);
+                w.spawnParticle(Particle.DRAGON_BREATH, cx, cy + y, cz, 4, spread, 0.3, spread, 0.02);
+                if (y % 4 == 0) w.spawnParticle(Particle.FLAME, cx, cy + y, cz, 3, spread * 0.6, 0.3, spread * 0.6, 0.03);
             }
-            w.spawnParticle(Particle.DRAGON_BREATH, pos, 8, 0.5, 0.4, 0.5, 0.04);
-            // luồng hơi thở phun xuống đất từ miệng rồng
-            Location ground = new Location(w, pos.getX(), Vfx.groundY(w, pos.getX(), pos.getZ(), cy), pos.getZ());
-            Vfx.line(w, pos, ground, 0.8, ember, 1.6f, Particle.DRAGON_BREATH);
-            if (t % 6 == 0) {
-                w.spawnParticle(Particle.FLAME, ground, 12, 1.0, 0.2, 1.0, 0.05);
+        }
+        // mặt đất nứt toác: phun trào lửa ở vài điểm ngẫu nhiên
+        if (t > 20 && t % 24 == 0) {
+            for (int k = 0; k < 3; k++) {
+                double a = rnd.nextDouble() * 2 * Math.PI;
+                double rr = Math.sqrt(rnd.nextDouble()) * radius * 0.9;
+                double x = cx + Math.cos(a) * rr;
+                double z = cz + Math.sin(a) * rr;
+                Location p0 = new Location(w, x, Vfx.groundY(w, x, z, cy), z);
+                Vfx.dustRing(w, p0, 1.6, 0.2, 14, 0, ember, 1.7f);
+                for (int y = 0; y < 7; y++) {
+                    w.spawnParticle(Particle.FLAME, x, p0.getY() + y, z, 5, 0.3, 0.3, 0.3, 0.06);
+                    if (y % 2 == 0) w.spawnParticle(Particle.LAVA, x, p0.getY() + y, z, 1, 0.3, 0.3, 0.3, 0);
+                }
+                w.playSound(p0, Sound.ENTITY_BLAZE_SHOOT, 0.7f, 0.5f);
+            }
+        }
+        if (t == 40) w.playSound(center, Sound.ENTITY_ENDER_DRAGON_GROWL, 4.0f, 0.6f);
+
+        // các đầu rồng: lao xuống từ trên trời rồi bay vòng nhiều tầng, nhiều chiều, phun hơi thở xuống đất
+        Color[] palette = {red, violet, ember, Color.fromRGB(255, 70, 140), Color.fromRGB(70, 0, 90)};
+        int n = b.heads.size();
+        double ease = Math.min(1.0, t / 40.0);
+        ease = ease * ease * (3 - 2 * ease);
+        for (int i = 0; i < n; i++) {
+            ItemDisplay head = b.heads.get(i);
+            if (!head.isValid()) continue;
+            double sign = (i % 2 == 0) ? 1.0 : -1.0;
+            double orbit = radius * HEAD_ORBIT[i % HEAD_ORBIT.length] * (1.0 + 0.7 * (1.0 - ease));
+            double ang = i * 2 * Math.PI / n + sign * t * (0.04 + 0.006 * (i % 3));
+            double hy = cy + HEAD_HEIGHT[i % HEAD_HEIGHT.length] + 26 * (1.0 - ease) + Math.sin(t * 0.1 + i) * 1.2;
+            Location pos = new Location(w, cx + Math.cos(ang) * orbit, hy, cz + Math.sin(ang) * orbit);
+            Vector dir = new Vector(-Math.sin(ang) * sign, -0.35 * (1.0 - ease), Math.cos(ang) * sign);
+            Location facing = pos.clone();
+            facing.setDirection(dir);
+            head.teleport(facing);
+
+            Color c1 = palette[i % palette.length];
+            Color c2 = palette[(i + 1) % palette.length];
+            // thân và đuôi uốn lượn phía sau đầu
+            int segs = Vfx.pts(18, 8);
+            for (int k = 1; k <= segs; k++) {
+                double a2 = ang - sign * k * 0.07;
+                double yy = hy + Math.sin((t - k * 2) * 0.1 + i) * 0.6 + Math.sin(k * 0.5 + t * 0.2) * 0.5;
+                Vfx.dustAt(w, cx + Math.cos(a2) * orbit, yy, cz + Math.sin(a2) * orbit,
+                        k % 2 == 0 ? c1 : c2, Math.max(1.1f, 3.0f - k * 0.1f));
+            }
+            w.spawnParticle(Particle.DRAGON_BREATH, pos, 4, 0.5, 0.4, 0.5, 0.04);
+
+            // phun hơi thở xuống đất
+            if (((t / 2) + i * 5) % 12 == 0) {
+                double ta = ang + sign * 0.7;
+                double tr = radius * (0.25 + 0.65 * rnd.nextDouble());
+                double gx = cx + Math.cos(ta) * tr;
+                double gz = cz + Math.sin(ta) * tr;
+                Location ground = new Location(w, gx, Vfx.groundY(w, gx, gz, cy), gz);
+                Vfx.line(w, pos, ground, 0.8, ember, 1.7f, Particle.DRAGON_BREATH);
+                w.spawnParticle(Particle.FLAME, ground, 14, 1.0, 0.2, 1.0, 0.06);
+                w.spawnParticle(Particle.DRAGON_BREATH, ground, 20, 1.2, 0.3, 1.2, 0.03);
                 w.playSound(ground, Sound.ENTITY_BLAZE_SHOOT, 0.5f, 0.5f);
             }
         }
