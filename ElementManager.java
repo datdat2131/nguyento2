@@ -721,6 +721,8 @@ public class ElementManager {
         float s = slot == 0 ? 0.9f : 0.75f;
         if (el.isSpecial()) s *= 1.25f;
         if (el.isFusion()) s *= 1.1f;
+        float custom = (float) settings.n(el, "orbit-scale"); // config: elements.<id>.orbit-scale
+        if (custom > 0f) s *= custom;
         return new Transformation(new Vector3f(0f, bob, 0f), q, new Vector3f(s, s, s), new Quaternionf());
     }
 }

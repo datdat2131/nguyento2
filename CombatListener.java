@@ -194,43 +194,43 @@ public class CombatListener implements Listener {
                     }
                     break;
                 case FIRE_WATER:
-                    if (roll(settings.chance(el, "steam-chance"))) steamBurst(attacker, victim);
+                    if (roll(settings.procChance(el, "steam-chance"))) steamBurst(attacker, victim);
                     break;
                 case BAO_CAT:
-                    if (roll(settings.chance(el, "sand-chance"))) sandstorm(attacker, victim);
+                    if (roll(settings.procChance(el, "sand-chance"))) sandstorm(attacker, victim);
                     break;
                 case HAN_LOI:
-                    if (roll(settings.chance(el, "bolt-chance"))) iceBolt(attacker, victim);
+                    if (roll(settings.procChance(el, "bolt-chance"))) iceBolt(attacker, victim);
                     break;
                 case LOI_VIEM:
-                    if (roll(settings.chance(el, "strike-chance"))) thunderFlame(attacker, victim);
+                    if (roll(settings.procChance(el, "strike-chance"))) thunderFlame(attacker, victim);
                     break;
                 case THANH_LONG:
                 case HAC_LONG:
-                    if (roll(settings.chance(el, "soul-chance"))) dragonSoul(attacker, victim, el);
+                    if (roll(settings.procChance(el, "soul-chance"))) dragonSoul(attacker, victim, el);
                     break;
                 case BANG_THUY:
-                    if (roll(settings.chance(el, "freeze-chance"))) freezeHit(attacker, victim);
+                    if (roll(settings.procChance(el, "freeze-chance"))) freezeHit(attacker, victim);
                     break;
                 case DUNG_NHAM:
-                    if (roll(settings.chance(el, "magma-chance"))) {
+                    if (roll(settings.procChance(el, "magma-chance"))) {
                         burst(attacker, victim, settings.n(el, "magma-radius"), settings.n(el, "magma-damage"),
                                 settings.n(el, "magma-ignite-seconds"), Particle.LAVA,
                                 Sound.ENTITY_BLAZE_SHOOT, 0.8f, 0.6f);
                     }
                     break;
                 case VIEM_LONG:
-                    if (roll(settings.chance(el, "inferno-chance"))) {
+                    if (roll(settings.procChance(el, "inferno-chance"))) {
                         burst(attacker, victim, settings.n(el, "inferno-radius"), settings.n(el, "inferno-damage"),
                                 settings.n(el, "inferno-ignite-seconds"), Particle.DRAGON_BREATH,
                                 Sound.ENTITY_ENDER_DRAGON_GROWL, 0.6f, 1.4f);
                     }
                     break;
                 case BAO_TO:
-                    if (roll(settings.chance(el, "storm-chance"))) storm(attacker, victim);
+                    if (roll(settings.procChance(el, "storm-chance"))) storm(attacker, victim);
                     break;
                 case BAO_TUYET:
-                    if (roll(settings.chance(el, "blizzard-chance"))) blizzard(attacker, victim);
+                    if (roll(settings.procChance(el, "blizzard-chance"))) blizzard(attacker, victim);
                     break;
                 default:
                     break;

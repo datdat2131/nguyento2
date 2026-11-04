@@ -986,9 +986,10 @@ public class SkillManager implements Listener {
 
         final Breath b = new Breath();
         final int headCount = Math.max(1, Math.min(8, (int) cfg(el, "skill.heads", 5)));
+        final float headScale = (float) cfg(el, "skill.head-scale", 1.0);
         if (vis) {
             for (int i = 0; i < headCount; i++) {
-                b.heads.add(Vfx.item(w, center.clone().add(0, 40, 0), Material.DRAGON_HEAD, 5.5f + (i % 2) * 1.5f));
+                b.heads.add(Vfx.item(w, center.clone().add(0, 40, 0), Material.DRAGON_HEAD, headScale * (5.5f + (i % 2) * 1.5f)));
             }
         }
         breaths.put(p.getUniqueId(), b);

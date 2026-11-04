@@ -30,6 +30,9 @@ performance:
 # ----------------------------------------------------------------------
 fusion:
   cost-levels: 0               # số cấp độ (level kinh nghiệm) tốn mỗi lần kết hợp. 0 = miễn phí
+  passive-chance-percent: 100  # hệ số chung nhân vào xác suất kích hoạt nội tại CHÍNH của mọi hợp thể (100 = giữ nguyên,
+                               # 50 = giảm một nửa, 200 = gấp đôi, tối đa mỗi nội tại vẫn là 100%). Xác suất riêng từng hợp thể
+                               # chỉnh ở mục elements.<id> (steam-chance, sand-chance, bolt-chance, strike-chance, soul-chance...)
 
 elements:
 
@@ -122,6 +125,7 @@ elements:
     damage: 2
     max-health: 4
     armor-percent: 10
+    orbit-scale: 0.6               # kích thước đầu rồng bay quanh người (1.0 = to như gốc). Mọi nguyên tố đều có thể thêm dòng này
     # Chiêu Hơi Thở Rồng: trang bị ở ô nào cũng được, nhận vật phẩm kỹ năng và chuột phải để dùng
     skill:
       cooldown: 90
@@ -129,6 +133,7 @@ elements:
       radius: 20                     # bán kính vùng hơi thở quanh vị trí tung chiêu (block)
       damage-per-second: 10          # sát thương mỗi giây cho mọi kẻ địch trong vùng
       heads: 5                       # số đầu rồng bay vòng quanh vùng (1-8, chỉ là hiệu ứng hình ảnh)
+      head-scale: 1.0                # kích thước các đầu rồng khổng lồ trong chiêu (1.0 = mặc định, 0.5 = nhỏ một nửa)
 
   # ======================= HỢP THỂ =======================
   # Mỗi hợp thể là nguyên tố độc lập: chỉ có buff và nội tại ghi dưới đây.

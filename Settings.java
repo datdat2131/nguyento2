@@ -39,6 +39,44 @@ public class Settings {
         return plugin.getConfig().getBoolean("general." + key);
     }
 
+    /** Hệ số chung (%) nhân vào xác suất kích hoạt nội tại chính của mọi hợp thể. 100 = giữ nguyên. */
+    public double fusionChancePercent() {
+        return Math.max(0.0, plugin.getConfig().getDouble("fusion.passive-chance-percent", 100.0));
+    }
+
+    /** Khóa xác suất kích hoạt nội tại CHÍNH của hợp thể (chịu ảnh hưởng của hệ số chung). */
+    private static boolean isProcKey(Element e, String key) {
+        if (!e.isFusion()) return false;
+        switch (key) {
+            case "steam-chance":
+            case "sand-chance":
+            case "bolt-chance":
+            case "strike-chance":
+            case "soul-chance":
+            case "magma-chance":
+            case "inferno-chance":
+            case "storm-chance":
+            case "blizzard-chance":
+                return true;
+            case "freeze-chance":
+                return e == Element.BANG_THUY; // Hàn Lôi: freeze-chance là xác suất có điều kiện, không nhân hệ số
+            default:
+                return false;
+        }
+    }
+
+    /** Xác suất (%) đã nhân hệ số chung, tối đa 100. Dùng để hiển thị và để tính. */
+    public double pc(Element e, String key) {
+        double v = n(e, key);
+        if (isProcKey(e, key)) v *= fusionChancePercent() / 100.0;
+        return Math.max(0.0, Math.min(100.0, v));
+    }
+
+    /** Xác suất 0..1 kích hoạt nội tại chính của hợp thể (đã nhân hệ số chung). */
+    public double procChance(Element e, String key) {
+        return pc(e, key) / 100.0;
+    }
+
     /** Số cấp độ (level kinh nghiệm) tốn mỗi lần kết hợp. 0 = miễn phí. */
     public int fusionCostLevels() {
         return Math.max(0, plugin.getConfig().getInt("fusion.cost-levels", 0));
@@ -139,7 +177,7 @@ public class Settings {
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
                 if (n(e, "steam-chance") > 0) {
-                    passives.add(f(n(e, "steam-chance")) + "% tạo vụ nổ hơi nước nhỏ: " + f(n(e, "steam-damage"))
+                    passives.add(f(pc(e, "steam-chance")) + "% tạo vụ nổ hơi nước nhỏ: " + f(n(e, "steam-damage"))
                             + " sát thương phép bán kính " + f(n(e, "steam-radius")) + " block, Giảm Tốc I "
                             + f(n(e, "steam-slow-seconds")) + "s");
                     passives.add("Mục tiêu đang Thiêu Đốt: vụ nổ +" + f(n(e, "steam-burn-bonus-percent")) + "% sát thương");
@@ -154,7 +192,7 @@ public class Settings {
                 stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 if (n(e, "sand-chance") > 0) {
-                    passives.add(f(n(e, "sand-chance")) + "% tạo cơn bão cát: " + f(n(e, "sand-damage"))
+                    passives.add(f(pc(e, "sand-chance")) + "% tạo cơn bão cát: " + f(n(e, "sand-damage"))
                             + " sát thương diện rộng " + f(n(e, "sand-radius")) + " block, Giảm tốc "
                             + f(n(e, "sand-slow-percent")) + "% trong " + f(n(e, "sand-slow-seconds")) + "s");
                     passives.add(f(n(e, "sand-knockup-chance")) + "% hất tung nhẹ mỗi kẻ địch trúng");
@@ -169,10 +207,10 @@ public class Settings {
                 stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 if (n(e, "bolt-chance") > 0) {
-                    passives.add(f(n(e, "bolt-chance")) + "% triệu hồi tia sét băng: " + f(n(e, "bolt-damage"))
+                    passives.add(f(pc(e, "bolt-chance")) + "% triệu hồi tia sét băng: " + f(n(e, "bolt-damage"))
                             + " sát thương sét + " + f(n(e, "frost-damage")) + " sát thương băng");
                     passives.add("Mục tiêu bị Chậm " + f(n(e, "slow-percent")) + "% trong " + f(n(e, "slow-seconds")) + "s");
-                    passives.add("Mục tiêu đang bị Chậm: " + f(n(e, "freeze-chance")) + "% Đóng Băng "
+                    passives.add("Mục tiêu đang bị Chậm: " + f(pc(e, "freeze-chance")) + "% Đóng Băng "
                             + f(n(e, "freeze-seconds")) + "s");
                     passives.add("Đánh mục tiêu đang Đóng Băng: phá băng, +" + f(n(e, "shatter-bonus-percent")) + "% sát thương");
                 }
@@ -183,7 +221,7 @@ public class Settings {
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 if (n(e, "strike-chance") > 0) {
-                    passives.add("Thiên Hỏa Lôi Bạo: " + f(n(e, "strike-chance")) + "% tạo Lôi Viêm lên mục tiêu, gây "
+                    passives.add("Thiên Hỏa Lôi Bạo: " + f(pc(e, "strike-chance")) + "% tạo Lôi Viêm lên mục tiêu, gây "
                             + f(n(e, "fire-damage")) + " sát thương lửa + " + f(n(e, "lightning-damage")) + " sát thương sét");
                     passives.add("Thiêu Đốt " + f(n(e, "burn-seconds")) + "s và Nhiễm Điện " + f(n(e, "static-seconds")) + "s");
                     passives.add("Mục tiêu có cả 2 hiệu ứng: Lôi Viêm Bộc Phát +" + f(n(e, "burst-bonus-percent"))
@@ -196,7 +234,7 @@ public class Settings {
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 if (n(e, "freeze-chance") > 0)
-                    passives.add(f(n(e, "freeze-chance")) + "% Đóng Băng mục tiêu " + f(n(e, "freeze-seconds"))
+                    passives.add(f(pc(e, "freeze-chance")) + "% Đóng Băng mục tiêu " + f(n(e, "freeze-seconds"))
                             + "s (gần như không thể di chuyển) và gây " + f(n(e, "freeze-damage")) + " sát thương");
                 break;
             case THANH_LONG:
@@ -205,7 +243,7 @@ public class Settings {
                 stat(buffs, e, "armor-percent", "+{v}% giáp");
                 stat(buffs, e, "damage-reduction-percent", "Giảm {v}% sát thương nhận vào");
                 if (n(e, "soul-chance") > 0) {
-                    passives.add("Thánh Long Giáng Thế: " + f(n(e, "soul-chance")) + "% triệu hồi Long Hồn Ánh Sáng, gây "
+                    passives.add("Thánh Long Giáng Thế: " + f(pc(e, "soul-chance")) + "% triệu hồi Long Hồn Ánh Sáng, gây "
                             + f(n(e, "soul-damage")) + " sát thương Ánh Sáng + Rồng");
                     passives.add("Mục tiêu bị Thánh Ấn " + f(n(e, "mark-seconds")) + "s: đánh trúng gây thêm "
                             + f(n(e, "holy-bonus-percent")) + "% sát thương");
@@ -217,7 +255,7 @@ public class Settings {
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "lifesteal-percent", "{v}% sát thương gây ra hồi thành máu");
                 if (n(e, "soul-chance") > 0) {
-                    passives.add("Hắc Long Thôn Phệ: " + f(n(e, "soul-chance")) + "% triệu hồi Hắc Long Hồn, gây "
+                    passives.add("Hắc Long Thôn Phệ: " + f(pc(e, "soul-chance")) + "% triệu hồi Hắc Long Hồn, gây "
                             + f(n(e, "soul-damage")) + " sát thương Rồng + Bóng Tối");
                     passives.add("Mục tiêu bị Hắc Ấn " + f(n(e, "mark-seconds")) + "s: đánh trúng gây Thôn Phệ +"
                             + f(n(e, "devour-bonus-percent")) + "% sát thương và hồi " + f(n(e, "devour-heal-percent"))
@@ -230,7 +268,7 @@ public class Settings {
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "armor-percent", "+{v}% giáp");
                 if (n(e, "magma-chance") > 0)
-                    passives.add(f(n(e, "magma-chance")) + "% Dung Nham Phun Trào: " + f(n(e, "magma-damage"))
+                    passives.add(f(pc(e, "magma-chance")) + "% Dung Nham Phun Trào: " + f(n(e, "magma-damage"))
                             + " sát thương lan bán kính " + f(n(e, "magma-radius")) + " block và đốt "
                             + f(n(e, "magma-ignite-seconds")) + "s");
                 break;
@@ -240,7 +278,7 @@ public class Settings {
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 stat(buffs, e, "attack-speed-percent", "+{v}% tốc độ đánh");
                 if (n(e, "storm-chance") > 0)
-                    passives.add(f(n(e, "storm-chance")) + "% Cơn Bão Sét: " + f(n(e, "storm-damage"))
+                    passives.add(f(pc(e, "storm-chance")) + "% Cơn Bão Sét: " + f(n(e, "storm-damage"))
                             + " sát thương lan bán kính " + f(n(e, "storm-radius")) + " block và hất tung kẻ địch");
                 break;
             case BAO_TUYET:
@@ -248,7 +286,7 @@ public class Settings {
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 stat(buffs, e, "speed-percent", "+{v}% tốc độ di chuyển");
                 if (n(e, "blizzard-chance") > 0)
-                    passives.add(f(n(e, "blizzard-chance")) + "% Bão Tuyết: " + f(n(e, "blizzard-damage"))
+                    passives.add(f(pc(e, "blizzard-chance")) + "% Bão Tuyết: " + f(n(e, "blizzard-damage"))
                             + " sát thương lan bán kính " + f(n(e, "blizzard-radius")) + " block và làm chậm "
                             + f(n(e, "blizzard-seconds")) + "s");
                 break;
@@ -256,7 +294,7 @@ public class Settings {
                 stat(buffs, e, "damage", "+{v} sát thương");
                 stat(buffs, e, "max-health", "+{v} máu tối đa");
                 if (n(e, "inferno-chance") > 0)
-                    passives.add(f(n(e, "inferno-chance")) + "% Long Viêm Thiêu Đốt: " + f(n(e, "inferno-damage"))
+                    passives.add(f(pc(e, "inferno-chance")) + "% Long Viêm Thiêu Đốt: " + f(n(e, "inferno-damage"))
                             + " sát thương lan bán kính " + f(n(e, "inferno-radius")) + " block và đốt "
                             + f(n(e, "inferno-ignite-seconds")) + "s");
                 break;

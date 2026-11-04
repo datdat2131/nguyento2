@@ -1,4 +1,4 @@
-# NguyenTo 1.5 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
+# NguyenTo 1.5.1 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
 
 ## Build
 Cần JDK 17+ và Maven:  `mvn clean package`  ->  `target/NguyenTo.jar` bỏ vào `plugins/`.
@@ -33,6 +33,8 @@ Menu hợp thể cũng dùng để trang bị / tắt hợp thể đã sở hữ
 Trạng thái dùng trong nội tại: **Thiêu Đốt** = đang cháy; **Ướt** = đang trong nước, đang bị mưa dội hoặc vừa dính hơi nước Fire Water;
 **Nhiễm Điện / Đóng Băng / Thánh Ấn / Hắc Ấn** là trạng thái có thời hạn do chính các hợp thể gây ra.
 Toàn bộ con số chỉnh trong `config.yml` (mục `elements.<id>`), phí kết hợp ở `fusion.cost-levels`.
+Xác suất nội tại của từng hợp thể chỉnh ở `steam-chance`, `sand-chance`, `bolt-chance`, `strike-chance`, `soul-chance`... và có hệ số chung `fusion.passive-chance-percent`.
+Kích thước nguyên tố bay quanh người: `elements.<id>.orbit-scale` (Rồng mặc định 0.6); đầu rồng trong chiêu: `skill.head-scale`.
 
 ## Dùng chiêu (vật phẩm kỹ năng)
 Mọi buff / nội tại hoạt động ở cả 3 ô. Bóng Tối / Ánh Sáng / Rồng trang bị ở ô nào cũng được
