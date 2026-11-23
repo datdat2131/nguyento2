@@ -1,4 +1,4 @@
-# NguyenTo 1.5.1 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
+# NguyenTo 1.7.0 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
 
 ## Build
 Cần JDK 17+ và Maven:  `mvn clean package`  ->  `target/NguyenTo.jar` bỏ vào `plugins/`.
@@ -35,6 +35,21 @@ Trạng thái dùng trong nội tại: **Thiêu Đốt** = đang cháy; **Ướt
 Toàn bộ con số chỉnh trong `config.yml` (mục `elements.<id>`), phí kết hợp ở `fusion.cost-levels`.
 Xác suất nội tại của từng hợp thể chỉnh ở `steam-chance`, `sand-chance`, `bolt-chance`, `strike-chance`, `soul-chance`... và có hệ số chung `fusion.passive-chance-percent`.
 Kích thước nguyên tố bay quanh người: `elements.<id>.orbit-scale` (Rồng mặc định 0.6); đầu rồng trong chiêu: `skill.head-scale`.
+
+## Ô nguyên tố thứ 4
+Mặc định trang bị tối đa 3 nguyên tố. **Ô thứ 4** mở khóa bằng nhiệm vụ khó (hạ quái, hạ người chơi, hạ boss, kết hợp hợp thể, sưu tầm nguyên tố) hoặc do admin cấp.
+- Xem tiến độ: `/nguyento quest` hoặc nút sách trong menu `/nguyento`.
+- Admin: `/nguyento slot give|remove|status <người chơi>`, `/nguyento quest reset <người chơi>`.
+- Mọi mục tiêu chỉnh trong `config.yml`, mục `extra-slot` (đặt 0 để bỏ một mục tiêu; `quest.enabled: false` để chỉ admin cấp).
+
+## Kiểu nguyên tố bay
+Mặc định các nguyên tố xếp hình cánh quạt bay **sau lưng** người chơi (1 cái ở giữa, 2 cái hai bên, 3 cái trái - giữa - phải) kèm vòng ma pháp phát sáng.
+Chỉnh ở mục `orbit` trong `config.yml`: `style` (`back` / `classic` = kiểu cũ), `back-distance`, `spread-degrees`, `height`, `size`, `ring`.
+
+## Giữ trang bị, bộ cộng hưởng, PvP
+- `general.keep-equipped-on-rejoin` (mặc định bật): thoát game / tắt server rồi vào lại vẫn giữ nguyên nguyên tố đã trang bị (chỉ giữ những nguyên tố còn sở hữu).
+- Mục `sets`: bộ cộng hưởng. Trang bị đủ 2-3 nguyên tố của một bộ thì nhận thêm buff, tự thêm bộ mới trong config. Menu `/nguyento` liệt kê các bộ và đánh dấu bộ đang có.
+- `general.pvp-passive-damage-percent` (mặc định 100): giảm sát thương nội tại + chiêu thức khi đánh người chơi (70 = giảm 30%).
 
 ## Dùng chiêu (vật phẩm kỹ năng)
 Mọi buff / nội tại hoạt động ở cả 3 ô. Bóng Tối / Ánh Sáng / Rồng trang bị ở ô nào cũng được

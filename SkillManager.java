@@ -944,7 +944,7 @@ public class SkillManager implements Listener {
             final LivingEntity le = (LivingEntity) ent;
             runBusy(() -> {
                 le.setNoDamageTicks(0);
-                le.damage(damage, caster);
+                le.damage(damage * settings.pvp(le), caster);
             });
             le.setVelocity(le.getVelocity().add(new Vector(0, 0.5, 0)));
             if (Vfx.on()) {
@@ -1023,7 +1023,7 @@ public class SkillManager implements Listener {
             final LivingEntity le = (LivingEntity) ent;
             runBusy(() -> {
                 le.setNoDamageTicks(0);
-                le.damage(dmg, owner);
+                le.damage(dmg * settings.pvp(le), owner);
             });
             if (Vfx.on()) {
                 Location l = le.getLocation().add(0, 1, 0);

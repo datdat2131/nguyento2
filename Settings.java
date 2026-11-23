@@ -1,5 +1,8 @@
 package vn.nguyento;
 
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,8 +16,53 @@ public class Settings {
         plugin.saveDefaultConfig();
     }
 
+    private List<SetBonus> cachedSets = null;
+
     public void reload() {
         plugin.reloadConfig();
+        cachedSets = null;
+    }
+
+    public org.bukkit.configuration.file.FileConfiguration cfg() {
+        return plugin.getConfig();
+    }
+
+    /** Ô nguyên tố thứ 4 có được bật không (extra-slot.enabled, mặc định bật). */
+    public boolean extraSlotEnabled() {
+        return plugin.getConfig().getBoolean("extra-slot.enabled", true);
+    }
+
+    /** Có nhiệm vụ để mở ô thứ 4 không (false = chỉ admin cấp). */
+    public boolean questEnabled() {
+        return plugin.getConfig().getBoolean("extra-slot.quest.enabled", true);
+    }
+
+    /** Giữ nguyên nguyên tố đã trang bị khi người chơi thoát rồi vào lại (general.keep-equipped-on-rejoin, mặc định bật). */
+    public boolean keepEquipped() {
+        return plugin.getConfig().getBoolean("general.keep-equipped-on-rejoin", true);
+    }
+
+    /** Hệ số sát thương nội tại / chiêu thức khi mục tiêu là người chơi (general.pvp-passive-damage-percent, mặc định 100). */
+    public double pvp(LivingEntity target) {
+        if (!(target instanceof Player)) return 1.0;
+        return Math.max(0.0, plugin.getConfig().getDouble("general.pvp-passive-damage-percent", 100.0)) / 100.0;
+    }
+
+    /** Tất cả bộ cộng hưởng khai báo trong config (rỗng nếu sets.enabled = false). */
+    public List<SetBonus> sets() {
+        if (!plugin.getConfig().getBoolean("sets.enabled", true)) return new ArrayList<>();
+        if (cachedSets == null) cachedSets = SetBonus.loadAll(plugin.getConfig());
+        return cachedSets;
+    }
+
+    /** Các bộ cộng hưởng đang có hiệu lực với danh sách nguyên tố đang trang bị. */
+    public List<SetBonus> activeSets(List<Element> equipped) {
+        List<SetBonus> out = new ArrayList<>();
+        if (equipped.isEmpty()) return out;
+        for (SetBonus sb : sets()) {
+            if (sb.matches(equipped)) out.add(sb);
+        }
+        return out;
     }
 
     /** Giá trị số của nguyên tố, ví dụ n(LUA, "damage"). */

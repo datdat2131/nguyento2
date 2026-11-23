@@ -6,6 +6,8 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -40,7 +42,9 @@ import java.util.stream.Collectors;
 /** Quản lý sở hữu / trang bị nguyên tố, chỉ số (buff) và hiệu ứng bay quanh người chơi. */
 public class ElementManager {
 
-    public static final int MAX_EQUIPPED = 3;
+    /** Số ô trang bị mặc định; mở khóa nhiệm vụ / admin cấp được thêm 1 ô (tối đa MAX_SLOTS). */
+    public static final int BASE_SLOTS = 3;
+    public static final int MAX_SLOTS = 4;
 
     public enum EquipResult { OK, NOT_OWNED, ALREADY, FULL }
 
@@ -53,6 +57,7 @@ public class ElementManager {
         long nextKey = 0;
         long nextParticle = 0;
         long nextDust = 0;
+        long nextRing = 0;
 
         Orbit(Element element, ItemDisplay display) {
             this.element = element;
@@ -79,6 +84,8 @@ public class ElementManager {
     private final NamespacedKey equippedKey;
     private final NamespacedKey scrollKey;
     private final NamespacedKey statFlagKey;
+    private final NamespacedKey extraSlotKey;
+    private QuestManager quest;
     private boolean warnedStats = false;
     private boolean warnedGeneral = false;
 
@@ -93,8 +100,17 @@ public class ElementManager {
     private boolean particlesOn = true;
     private double density = 0.6;
     private float viewRange = 0.5f;
+    // kiểu nguyên tố bay quanh người (config: orbit.*)
+    private boolean backStyle = true;
+    private double backDist = 0.95;
+    private double spreadRad = Math.toRadians(50);
+    private double heightFactor = 1.0;
+    private double sizeMul = 1.0;
+    private boolean ringOn = true;
 
     private final Marks marks;
+    /** Các bộ cộng hưởng đang có hiệu lực của từng người chơi (để chỉ thông báo khi có thay đổi). */
+    private final Map<UUID, Set<String>> activeSetIds = new HashMap<>();
 
     public ElementManager(NguyenToPlugin plugin, Settings settings, Marks marks) {
         this.plugin = plugin;
@@ -104,6 +120,7 @@ public class ElementManager {
         this.equippedKey = new NamespacedKey(plugin, "equipped");
         this.scrollKey = new NamespacedKey(plugin, "scroll");
         this.statFlagKey = new NamespacedKey(plugin, "statflag");
+        this.extraSlotKey = new NamespacedKey(plugin, "extra_slot");
     }
 
     /** Chạy một bước mà không để lỗi ở bước đó làm hỏng cả quá trình trang bị. */
@@ -121,6 +138,37 @@ public class ElementManager {
 
     public void setSkillItems(SkillItems skillItems) {
         this.skillItems = skillItems;
+    }
+
+    public void setQuest(QuestManager quest) {
+        this.quest = quest;
+    }
+
+    /** Người chơi đã mở khóa ô nguyên tố thứ 4 chưa (nhiệm vụ hoặc admin cấp). */
+    public boolean hasExtraSlot(Player p) {
+        return p.getPersistentDataContainer().has(extraSlotKey, PersistentDataType.INTEGER);
+    }
+
+    /** Số ô trang bị hiện có của người chơi: 3, hoặc 4 nếu đã mở khóa (và tính năng được bật trong config). */
+    public int maxSlots(Player p) {
+        return BASE_SLOTS + (settings.extraSlotEnabled() && hasExtraSlot(p) ? 1 : 0);
+    }
+
+    /** Cấp / thu hồi ô thứ 4. Thu hồi thì nguyên tố ở ô cuối bị gỡ ra nếu đang vượt số ô. */
+    public void setExtraSlot(Player p, boolean on) {
+        if (on) {
+            p.getPersistentDataContainer().set(extraSlotKey, PersistentDataType.INTEGER, 1);
+        } else {
+            p.getPersistentDataContainer().remove(extraSlotKey);
+        }
+        List<Element> list = equipped.get(p.getUniqueId());
+        if (list == null) return;
+        boolean trimmed = false;
+        while (list.size() > maxSlots(p)) {
+            list.remove(list.size() - 1);
+            trimmed = true;
+        }
+        if (trimmed) refreshAfterChange(p);
     }
 
     private void syncSkillItem(Player p) {
@@ -159,6 +207,7 @@ public class ElementManager {
         if (owned.contains(e)) return false;
         owned.add(e);
         p.getPersistentDataContainer().set(ownedKey, PersistentDataType.STRING, join(owned));
+        if (quest != null) quest.refreshOwned(p);
         return true;
     }
 
@@ -189,7 +238,7 @@ public class ElementManager {
         if (!owns(p, e)) return EquipResult.NOT_OWNED;
         List<Element> list = equipped.computeIfAbsent(p.getUniqueId(), k -> new ArrayList<>());
         if (list.contains(e)) return EquipResult.ALREADY;
-        if (list.size() >= MAX_EQUIPPED) return EquipResult.FULL;
+        if (list.size() >= maxSlots(p)) return EquipResult.FULL;
         list.add(e);
         refreshAfterChange(p);
         return EquipResult.OK;
@@ -210,35 +259,66 @@ public class ElementManager {
 
     /** Sau mỗi lần đổi trang bị: áp lại buff, dựng lại nguyên tố bay, đồng bộ vật phẩm kỹ năng. Mỗi bước độc lập. */
     private void refreshAfterChange(Player p) {
+        if (settings.keepEquipped()) safe(() -> saveEquipped(p));
+        safe(() -> notifySets(p));
         safe(() -> applyStats(p));
         safe(() -> rebuild(p));
         safe(() -> syncSkillItem(p));
     }
 
     /**
-     * Vào game: LUÔN bắt đầu với 0 nguyên tố trang bị (quyền sở hữu vẫn giữ).
-     * Dọn sạch buff còn sót từ lần trước / từ các bản plugin cũ.
+     * Vào game: khôi phục nguyên tố đang trang bị từ lần trước (nếu general.keep-equipped-on-rejoin bật),
+     * chỉ giữ những nguyên tố người chơi vẫn còn sở hữu. Dọn sạch buff còn sót từ bản plugin cũ.
      */
     public void load(Player p) {
         safe(() -> purgeLegacyModifiers(p));
-        p.getPersistentDataContainer().remove(equippedKey);
-        equipped.put(p.getUniqueId(), new ArrayList<>());
+        List<Element> restored = new ArrayList<>();
+        if (settings.keepEquipped()) {
+            List<Element> owned = getOwned(p);
+            for (Element e : parse(p.getPersistentDataContainer().get(equippedKey, PersistentDataType.STRING))) {
+                if (owned.contains(e) && restored.size() < maxSlots(p)) restored.add(e);
+            }
+        } else {
+            p.getPersistentDataContainer().remove(equippedKey);
+        }
+        equipped.put(p.getUniqueId(), restored);
+        // đặt sẵn bộ cộng hưởng hiện có để lần khôi phục này không bị thông báo lại
+        Set<String> ids = new LinkedHashSet<>();
+        for (SetBonus sb : settings.activeSets(restored)) ids.add(sb.id);
+        activeSetIds.put(p.getUniqueId(), ids);
+
         safe(() -> despawn(p));
-        safe(() -> syncStats(p, Collections.emptyList()));
-        safe(() -> syncSkillItem(p));
+        if (restored.isEmpty()) {
+            safe(() -> syncStats(p, Collections.emptyList()));
+            safe(() -> syncSkillItem(p));
+            return;
+        }
+        refreshAfterChange(p);
+        // làm lại lần nữa sau một lúc: lúc mới vào, thế giới / kho đồ có thể chưa sẵn sàng hẳn
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!p.isOnline()) return;
+            List<Element> cur = equipped.get(p.getUniqueId());
+            if (cur == null || cur.isEmpty()) return;
+            refreshAfterChange(p);
+        }, 20L);
     }
 
-    /** Thoát game: tự động bỏ trang bị toàn bộ, buff reset, vật phẩm kỹ năng bị thu hồi. */
+    /** Thoát game: lưu nguyên tố đang trang bị (nếu bật), rồi gỡ buff / nguyên tố bay / vật phẩm kỹ năng. */
     public void unload(Player p) {
+        if (settings.keepEquipped()) {
+            saveEquipped(p);
+        } else {
+            p.getPersistentDataContainer().remove(equippedKey);
+        }
         safe(() -> {
             if (skillItems != null) skillItems.removeAll(p);
         });
         safe(() -> despawn(p));
         List<Element> list = equipped.get(p.getUniqueId());
         if (list != null) list.clear();
-        p.getPersistentDataContainer().remove(equippedKey);
         safe(() -> syncStats(p, Collections.emptyList()));
         equipped.remove(p.getUniqueId());
+        activeSetIds.remove(p.getUniqueId());
     }
 
     /** Đặt lại hoàn toàn một người chơi: bỏ trang bị, xóa buff kẹt, chỉ số về mặc định. */
@@ -246,6 +326,7 @@ public class ElementManager {
         safe(() -> purgeLegacyModifiers(p));
         List<Element> list = equipped.computeIfAbsent(p.getUniqueId(), k -> new ArrayList<>());
         list.clear();
+        activeSetIds.remove(p.getUniqueId());
         p.getPersistentDataContainer().remove(equippedKey);
         safe(() -> {
             setBase(p, Attrs.MAX_HEALTH, DEF_HEALTH);
@@ -285,6 +366,34 @@ public class ElementManager {
                 if (ours) inst.removeModifier(m);
             }
         }
+    }
+
+    /** Thông báo khi bộ cộng hưởng được kích hoạt / mất đi (chỉ khi có thay đổi). */
+    private void notifySets(Player p) {
+        UUID id = p.getUniqueId();
+        List<SetBonus> now = settings.activeSets(getEquipped(p));
+        Set<String> before = activeSetIds.getOrDefault(id, Collections.emptySet());
+        Set<String> after = new LinkedHashSet<>();
+        for (SetBonus sb : now) {
+            after.add(sb.id);
+            if (before.contains(sb.id)) continue;
+            p.sendMessage(sb.colored() + " §7- cộng hưởng kích hoạt! §8(" + String.join(", ", sb.describe()) + ")");
+            Fx.actionBar(p, sb.color + "✦ Cộng hưởng " + sb.name + " ✦");
+            p.playSound(p.getLocation(), Sound.BLOCK_BEACON_ACTIVATE, 0.7f, 1.8f);
+            if (Vfx.on()) {
+                p.getWorld().spawnParticle(Particle.END_ROD, p.getLocation().add(0, 1, 0), 30, 0.5, 0.8, 0.5, 0.1);
+            }
+        }
+        for (String old : before) {
+            if (after.contains(old)) continue;
+            for (SetBonus sb : settings.sets()) {
+                if (sb.id.equals(old)) {
+                    p.sendMessage("§7Mất cộng hưởng " + sb.colored() + "§7.");
+                    break;
+                }
+            }
+        }
+        activeSetIds.put(id, after);
     }
 
     /** Gọi sau khi /nguyento reload để áp lại chỉ số mới. */
@@ -374,6 +483,14 @@ public class ElementManager {
             if (any) {
                 UUID id = p.getUniqueId();
                 for (Element e : eq) spd += marks.value(id, Marks.speed(e));
+                // bộ cộng hưởng (config: sets)
+                for (SetBonus sb : settings.activeSets(eq)) {
+                    hp += sb.maxHealth;
+                    dmg += sb.damage;
+                    spd += sb.speedPercent / 100.0;
+                    aspd += sb.attackSpeedPercent / 100.0;
+                    armor += sb.armorPercent / 100.0;
+                }
             }
 
             setBase(p, Attrs.MAX_HEALTH, Math.max(1.0, DEF_HEALTH + hp));
@@ -439,6 +556,7 @@ public class ElementManager {
 
         List<Element> eq = equipped.get(p.getUniqueId());
         if (eq != null && eq.removeAll(parts)) refreshAfterChange(p);
+        if (quest != null) quest.onFuse(p);
         return FuseResult.OK;
     }
 
@@ -514,6 +632,12 @@ public class ElementManager {
         particlesOn = settings.pb("particles");
         density = Math.max(0.0, Math.min(2.0, settings.perf("particle-density")));
         viewRange = (float) (Math.max(8.0, settings.perf("view-range-blocks")) / 64.0);
+        backStyle = !"classic".equalsIgnoreCase(plugin.getConfig().getString("orbit.style", "back"));
+        backDist = Math.max(0.3, Math.min(3.0, plugin.getConfig().getDouble("orbit.back-distance", 0.95)));
+        spreadRad = Math.toRadians(Math.max(0.0, Math.min(90.0, plugin.getConfig().getDouble("orbit.spread-degrees", 50.0))));
+        heightFactor = Math.max(0.3, Math.min(1.6, plugin.getConfig().getDouble("orbit.height", 1.0)));
+        sizeMul = Math.max(0.2, Math.min(3.0, plugin.getConfig().getDouble("orbit.size", 1.0)));
+        ringOn = plugin.getConfig().getBoolean("orbit.ring", true);
         task = Bukkit.getScheduler().runTaskTimer(plugin, this::tickAll, 1L, interval);
     }
 
@@ -562,10 +686,15 @@ public class ElementManager {
         orbits.clear();
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (skillItems != null) safe(() -> skillItems.removeAll(p));
-            p.getPersistentDataContainer().remove(equippedKey);
+            if (settings.keepEquipped()) {
+                saveEquipped(p); // tắt server / reload plugin: vẫn giữ trang bị để lần sau tự khôi phục
+            } else {
+                p.getPersistentDataContainer().remove(equippedKey);
+            }
             safe(() -> syncStats(p, Collections.emptyList()));
         }
         equipped.clear();
+        activeSetIds.clear();
     }
 
     private boolean shouldShow(Player p) {
@@ -595,7 +724,7 @@ public class ElementManager {
         List<Orbit> list = new ArrayList<>();
         for (int i = 0; i < eq.size(); i++) {
             Element el = eq.get(i);
-            Location at = anchor(pl, height, i);
+            Location at = anchor(pl, height, i, eq.size());
             ItemDisplay d = pl.getWorld().spawn(at, ItemDisplay.class);
             d.setItemStack(displayItem(el));
             d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
@@ -604,7 +733,7 @@ public class ElementManager {
             d.setBrightness(new Display.Brightness(15, 15));
             d.setViewRange(viewRange);
             d.setTeleportDuration(interval);
-            d.setTransformation(transform(i, el, tick));
+            d.setTransformation(transform(i, eq.size(), el, tick));
             Orbit o = new Orbit(el, d);
             o.lastSent = at;
             o.nextKey = tick;
@@ -624,14 +753,14 @@ public class ElementManager {
         double height = p.getHeight();
         for (int i = 0; i < list.size(); i++) {
             Orbit o = list.get(i);
-            Location target = anchor(pl, height, i);
+            Location target = anchor(pl, height, i, list.size());
 
             // mốc xoay + nhấp nhô kế tiếp (client tự nội suy giữa các mốc)
             if (tick + interval >= o.nextKey) {
                 long when = tick + KEY_STEP;
                 o.display.setInterpolationDuration(KEY_STEP);
                 o.display.setInterpolationDelay(0);
-                o.display.setTransformation(transform(i, o.element, when));
+                o.display.setTransformation(transform(i, list.size(), o.element, when));
                 o.nextKey = when;
             }
 
@@ -646,6 +775,7 @@ public class ElementManager {
 
             particles(o, target);
         }
+        backRing(pl, height, list);
     }
 
     private static float yawDiff(float a, float b) {
@@ -689,17 +819,40 @@ public class ElementManager {
         }
     }
 
-    /** Vị trí của từng ô: 0 = trên đầu, 1 = vai trái, 2 = vai phải (yaw = hướng người chơi). */
-    private Location anchor(Location pl, double height, int slot) {
+    /** Làn của nguyên tố trong hình quạt sau lưng: -1 = trái, 0 = giữa, 1 = phải (xếp đối xứng theo số lượng). */
+    private static double lane(int slot, int n) {
+        if (n <= 1) return 0;
+        if (n == 2) return slot == 0 ? -1 : 1;
+        if (n == 3) return slot - 1;
+        return slot - 1.5; // 4 nguyên tố: -1.5, -0.5, 0.5, 1.5
+    }
+
+    /**
+     * Vị trí của từng nguyên tố (yaw = hướng người chơi).
+     * Kiểu "back": xếp hình cánh quạt PHÍA SAU LƯNG (1 cái ở giữa; 2 cái hai bên; 3 cái trái - giữa - phải, cái giữa cao hơn).
+     * Kiểu "classic": ô 0 trên đầu, ô 1-2 lơ lửng hai bên vai.
+     */
+    private Location anchor(Location pl, double height, int slot, int n) {
         double yaw = Math.toRadians(pl.getYaw());
         double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
         double fx = -Math.sin(yaw), fz = Math.cos(yaw);
 
         double side, y, back;
-        if (slot == 0) {
+        if (backStyle) {
+            double lane = lane(slot, n);
+            double ang = lane * spreadRad;
+            side = Math.sin(ang) * backDist;
+            back = -Math.cos(ang) * backDist;           // âm = phía sau lưng
+            double edge = Math.min(1.0, Math.abs(lane)); // 0 = giữa (cao nhất), 1 = ngoài rìa (thấp hơn)
+            y = (height * (0.98 - 0.2 * edge) + (0.2 - 0.1 * edge)) * heightFactor;
+        } else if (slot == 0) {
             side = 0;
             y = height + 0.5;
             back = 0;
+        } else if (slot == 3) {
+            side = 0;
+            y = height * 0.9;
+            back = -0.7;
         } else {
             side = (slot == 1 ? -1 : 1) * 0.85;
             y = height * 0.8 + 0.15;
@@ -712,17 +865,59 @@ public class ElementManager {
                 pl.getYaw(), 0f);
     }
 
-    /** Xoay tròn + nghiêng ra ngoài ở hai bên vai + nhấp nhô nhẹ. 'when' = tick của mốc đích. */
-    private Transformation transform(int slot, Element el, long when) {
-        float spin = (float) (when * 0.1 + slot * 1.7);
-        float tilt = slot == 0 ? 0f : (slot == 1 ? -0.45f : 0.45f);
-        Quaternionf q = new Quaternionf().rotateZ(tilt).rotateX(slot == 0 ? 0f : 0.3f).rotateY(spin);
-        float bob = (float) (Math.sin((when + slot * 13) * 0.12) * 0.07);
-        float s = slot == 0 ? 0.9f : 0.75f;
+    /** Xoay tròn + trôi lơ lửng nhẹ (kiểu back) hoặc xoay + nhấp nhô (kiểu classic). 'when' = tick của mốc đích. */
+    private Transformation transform(int slot, int n, Element el, long when) {
+        float s;
+        Vector3f translation;
+        Quaternionf q;
+        if (backStyle) {
+            double lane = lane(slot, n);
+            float spin = (float) (when * 0.08 + slot * 1.7);
+            q = new Quaternionf().rotateZ((float) (-lane * 0.3)).rotateY(spin);
+            double ph = (when + slot * 17) * 0.09;
+            translation = new Vector3f((float) (Math.cos(ph) * 0.06), (float) (Math.sin(ph * 1.3) * 0.09),
+                    (float) (Math.sin(ph) * 0.06));
+            s = 0.9f - 0.15f * (float) Math.min(1.0, Math.abs(lane));
+        } else {
+            float spin = (float) (when * 0.1 + slot * 1.7);
+            float tilt = slot == 0 ? 0f : (slot == 1 ? -0.45f : 0.45f);
+            q = new Quaternionf().rotateZ(tilt).rotateX(slot == 0 ? 0f : 0.3f).rotateY(spin);
+            float bob = (float) (Math.sin((when + slot * 13) * 0.12) * 0.07);
+            translation = new Vector3f(0f, bob, 0f);
+            s = slot == 0 ? 0.9f : 0.75f;
+        }
         if (el.isSpecial()) s *= 1.25f;
         if (el.isFusion()) s *= 1.1f;
         float custom = (float) settings.n(el, "orbit-scale"); // config: elements.<id>.orbit-scale
         if (custom > 0f) s *= custom;
-        return new Transformation(new Vector3f(0f, bob, 0f), q, new Vector3f(s, s, s), new Quaternionf());
+        s *= (float) sizeMul;                                  // config: orbit.size
+        return new Transformation(translation, q, new Vector3f(s, s, s), new Quaternionf());
+    }
+
+    /** Vòng ma pháp phát sáng xoay chậm sau lưng, màu theo các nguyên tố đang trang bị (chỉ kiểu back, config orbit.ring). */
+    private void backRing(Location pl, double height, List<Orbit> list) {
+        if (!backStyle || !ringOn || !particlesOn || density <= 0 || list.isEmpty()) return;
+        Orbit first = list.get(0);
+        if (tick < first.nextRing) return;
+        first.nextRing = tick + 6;
+
+        double yaw = Math.toRadians(pl.getYaw());
+        double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
+        double fx = -Math.sin(yaw), fz = Math.cos(yaw);
+        double radius = Math.max(0.5, height * 0.52);
+        double cx = pl.getX() + fx * (-backDist * 0.55);
+        double cy = pl.getY() + height * 0.62 * heightFactor;
+        double cz = pl.getZ() + fz * (-backDist * 0.55);
+        World w = pl.getWorld();
+        int n = Math.max(6, scaled(18));
+        double rot = tick * 0.05;
+        for (int k = 0; k < n; k++) {
+            double a = rot + 2 * Math.PI * k / n;
+            double x = cx + rx * Math.cos(a) * radius;
+            double y = cy + Math.sin(a) * radius;
+            double z = cz + rz * Math.cos(a) * radius;
+            Color c = Vfx.colorOf(list.get(k % list.size()).element);
+            Fx.dust(w, new Location(w, x, y, z), 1, 0.0, c, 0.9f);
+        }
     }
 }

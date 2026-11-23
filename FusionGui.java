@@ -29,7 +29,7 @@ public class FusionGui implements Listener {
 
     private static final String TITLE = "§8✦ §dHợp Thể Nguyên Tố §8✦";
     private static final int SIZE = 54;
-    private static final int[] EQUIP_SLOTS = {2, 4, 6};
+    private static final int[] EQUIP_SLOTS = {1, 3, 5, 7};
     /** Ô của từng hợp thể, theo thứ tự khai báo trong Element. */
     private static final int[] FUSION_SLOTS = {10, 11, 12, 13, 14, 15, 16, 20, 21, 23, 24};
     private static final int INFO_SLOT = 40;
@@ -100,12 +100,16 @@ public class FusionGui implements Listener {
         List<Element> owned = manager.getOwned(p);
         Pending pd = activePending(p);
 
+        int maxSlots = manager.maxSlots(p);
         for (int i = 0; i < EQUIP_SLOTS.length; i++) {
             if (i < eq.size()) {
                 Element e = eq.get(i);
                 inv.setItem(EQUIP_SLOTS[i], icon(e.getMaterial(),
                         "§eÔ " + (i + 1) + " • " + ElementGui.SLOT_NAMES[i] + "§7: " + e.colored(),
                         List.of("", "§7Click để §ctắt §7nguyên tố này"), true));
+            } else if (i >= maxSlots) {
+                inv.setItem(EQUIP_SLOTS[i], icon(Material.RED_STAINED_GLASS_PANE,
+                        "§cÔ " + (i + 1) + " • Chưa mở khóa", List.of("", "§7Mở bằng nhiệm vụ khó hoặc admin cấp"), false));
             } else {
                 inv.setItem(EQUIP_SLOTS[i], icon(Material.LIGHT_GRAY_STAINED_GLASS_PANE,
                         "§7Ô " + (i + 1) + " • " + ElementGui.SLOT_NAMES[i] + " §8(trống)", List.of(), false));

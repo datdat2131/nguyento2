@@ -111,7 +111,7 @@ public class CombatListener implements Listener {
             if (!target.isValid() || target.isDead() || !skills.validTarget(attacker, target)) return;
             skills.runBusy(() -> {
                 target.setNoDamageTicks(0);
-                target.damage(dmg * outgoing(attacker), attacker);
+                target.damage(dmg * outgoing(attacker) * settings.pvp(target), attacker);
             });
         });
     }
@@ -266,7 +266,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg, attacker);
+                    le.damage(dmg * settings.pvp(le), attacker);
                 });
             }
         });
@@ -294,7 +294,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult, attacker);
+                    le.damage(dmg * mult * settings.pvp(le), attacker);
                 });
                 if (igniteSeconds > 0) le.setFireTicks(Math.max(le.getFireTicks(), (int) (igniteSeconds * 20)));
             }
@@ -318,7 +318,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult, attacker);
+                    le.damage(dmg * mult * settings.pvp(le), attacker);
                 });
                 le.setVelocity(le.getVelocity().add(new Vector(0, 0.6, 0)));
             }
@@ -343,7 +343,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult, attacker);
+                    le.damage(dmg * mult * settings.pvp(le), attacker);
                 });
                 Fx.addEffect(le, (int) (secs * 20), amp, true, "SLOW", "SLOWNESS");
             }
@@ -394,7 +394,7 @@ public class CombatListener implements Listener {
                 final double d = dmg * (burning ? 1.0 + burnBonus : 1.0) * mult;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(d, attacker);
+                    le.damage(d * settings.pvp(le), attacker);
                 });
                 slow(le, slowSeconds, 15);               // Giảm Tốc I
                 if (wet && roll(stunChance)) {
@@ -430,7 +430,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult, attacker);
+                    le.damage(dmg * mult * settings.pvp(le), attacker);
                 });
                 slow(le, slowSecs, slowPct);
                 if (roll(knockChance)) le.setVelocity(le.getVelocity().add(new Vector(0, 0.45, 0)));
@@ -545,7 +545,7 @@ public class CombatListener implements Listener {
                     || !skills.validTarget(attacker, victim)) return;
             skills.runBusy(() -> {
                 victim.setNoDamageTicks(0);
-                victim.damage(dmg * outgoing(attacker), attacker);
+                victim.damage(dmg * outgoing(attacker) * settings.pvp(victim), attacker);
             });
             marks.set(victim, dark ? Marks.DARK : Marks.HOLY, markSecs);
         });
@@ -623,6 +623,7 @@ public class CombatListener implements Listener {
         // Giảm sát thương vĩnh viễn (Ánh Sáng, Thánh Long...)
         double red = 0;
         for (Element el : eq) red += settings.n(el, "damage-reduction-percent");
+        for (SetBonus sb : settings.activeSets(eq)) red += sb.damageReductionPercent;
         if (red != 0) e.setDamage(e.getDamage() * Math.max(0, 1 - red / 100.0));
 
         // Ánh Sáng: lá chắn máu vàng

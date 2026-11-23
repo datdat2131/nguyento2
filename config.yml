@@ -11,6 +11,90 @@ general:
   skills-hit-players: true   # chiêu thức có ảnh hưởng người chơi khác không
   skills-hit-mobs: true      # chiêu thức có ảnh hưởng quái/động vật không
   show-skill-hud: true       # hiện trạng thái hồi chiêu trên thanh action bar
+  keep-equipped-on-rejoin: true   # true = thoát game / tắt server rồi vào lại vẫn giữ nguyên nguyên tố đã trang bị
+                                  # false = mỗi lần vào lại phải trang bị lại từ đầu
+  pvp-passive-damage-percent: 100 # % sát thương nội tại + chiêu thức khi mục tiêu là NGƯỜI CHƠI (100 = như đánh quái,
+                                  # 70 = giảm 30% để PvP đỡ lệch). Không ảnh hưởng đòn đánh thường
+
+# ----------------------------------------------------------------------
+#  Ô NGUYÊN TỐ THỨ 4 - mặc định chỉ có 3 ô. Ô thứ 4 mở bằng nhiệm vụ khó HOẶC admin cấp
+#  (admin: /nguyento slot give <người chơi>). Tiến độ lưu theo người chơi, không mất khi thoát game.
+# ----------------------------------------------------------------------
+extra-slot:
+  enabled: true                  # false = tắt hẳn ô thứ 4 (kể cả admin đã cấp)
+  broadcast: true                # thông báo cho cả server khi có người tự hoàn thành nhiệm vụ
+  quest:
+    enabled: true                # false = ô thứ 4 chỉ admin mới cấp được
+    require-equipped: true       # chỉ tính hạ gục khi đang trang bị ít nhất 1 nguyên tố
+    kill-mobs: 500               # hạ bao nhiêu quái thù địch (0 = bỏ mục tiêu này)
+    kill-players: 5              # hạ bao nhiêu người chơi (0 = bỏ). Giết lại cùng một người trong thời gian hồi bên dưới không tính
+    kill-players-cooldown-minutes: 30
+    kill-bosses:                 # hạ boss: loại: số lần. Thêm/bớt tùy ý (ender_dragon, wither, warden, elder_guardian...)
+      ender_dragon: 1
+      wither: 1
+      warden: 1
+    fuse-count: 2                # kết hợp hợp thể bao nhiêu lần (0 = bỏ)
+    own-elements: 8              # từng sở hữu bao nhiêu nguyên tố khác nhau (0 = bỏ)
+    # Phải hoàn thành TẤT CẢ mục tiêu đang bật. Không còn mục tiêu nào thì ô thứ 4 chỉ admin cấp được.
+
+# ----------------------------------------------------------------------
+#  BỘ CỘNG HƯỞNG - trang bị đủ 2-3 nguyên tố trong một bộ thì nhận thêm buff
+#  Tự thêm bộ mới: tạo mục mới có elements: [id1, id2, id3] (id xem trong README) và các buff bên dưới.
+#  Buff hỗ trợ: damage, max-health, speed-percent, attack-speed-percent, armor-percent, damage-reduction-percent
+#  Bộ nào sai id hoặc không phải 2-3 nguyên tố sẽ bị bỏ qua. enabled: false = tắt toàn bộ.
+# ----------------------------------------------------------------------
+sets:
+  enabled: true
+  tam_nguyen:
+    name: "Tam Nguyên"
+    color: "§6"
+    elements: [anh_sang, bong_toi, rong]
+    damage: 3
+    max-health: 6
+    damage-reduction-percent: 5
+  bao_lua:
+    name: "Bão Lửa"
+    color: "§c"
+    elements: [lua, set, gio]
+    damage: 2
+    speed-percent: 5
+    attack-speed-percent: 5
+  bang_dia:
+    name: "Băng Địa"
+    color: "§b"
+    elements: [bang, dat, nuoc]
+    max-health: 4
+    armor-percent: 15
+  long_hoa_loi:
+    name: "Long Hỏa Lôi"
+    color: "§4"
+    elements: [rong, lua, set]
+    damage: 3
+    attack-speed-percent: 8
+  thuy_hoa:
+    name: "Thủy Hỏa Giao Hòa"
+    color: "§d"
+    elements: [lua, nuoc]
+    max-health: 4
+    damage-reduction-percent: 3
+  long_than:
+    name: "Long Thần Song Hợp"
+    color: "§e"
+    elements: [thanh_long, hac_long]
+    damage: 4
+    max-health: 8
+    damage-reduction-percent: 5
+
+# ----------------------------------------------------------------------
+#  KIỂU NGUYÊN TỐ BAY QUANH NGƯỜI
+# ----------------------------------------------------------------------
+orbit:
+  style: back            # back = xếp hình cánh quạt bay sau lưng | classic = kiểu cũ (trên đầu + hai bên vai)
+  back-distance: 0.95    # khoảng cách phía sau lưng (block)
+  spread-degrees: 50     # độ xòe của hình quạt (0 = dồn hết ra sau lưng, 90 = dàn ngang hai bên)
+  height: 1.0            # hệ số độ cao (1.0 = ngang vai - đầu, nhỏ hơn = thấp xuống)
+  size: 1.0              # hệ số kích thước chung của mọi nguyên tố bay (từng nguyên tố còn có elements.<id>.orbit-scale)
+  ring: true             # vòng ma pháp phát sáng xoay chậm sau lưng (tắt nếu muốn nhẹ hơn)
 
 # ----------------------------------------------------------------------
 #  HIỆU NĂNG - chỉnh ở đây nếu bị giật / lag

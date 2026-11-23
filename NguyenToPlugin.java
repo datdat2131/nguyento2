@@ -23,6 +23,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
     private ElementGui gui;
     private FusionGui fusionGui;
     private Marks marks;
+    private QuestManager quest;
 
     @Override
     public void onEnable() {
@@ -35,12 +36,16 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         gui = new ElementGui(manager, settings);
         fusionGui = new FusionGui(manager, settings, gui);
         gui.setFusionGui(fusionGui);
+        quest = new QuestManager(this, manager, settings);
+        manager.setQuest(quest);
+        gui.setQuest(quest);
         items = new SkillItems(this, manager, settings);
         manager.setSkillItems(items);
 
         Bukkit.getPluginManager().registerEvents(gui, this);
         Bukkit.getPluginManager().registerEvents(fusionGui, this);
         Bukkit.getPluginManager().registerEvents(skills, this);
+        Bukkit.getPluginManager().registerEvents(quest, this);
         Bukkit.getPluginManager().registerEvents(new ElementListener(manager), this);
         Bukkit.getPluginManager().registerEvents(new CombatListener(this, manager, settings, skills, marks), this);
         Bukkit.getPluginManager().registerEvents(new SkillItemListener(this, items, skills), this);
@@ -92,6 +97,66 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
                 return true;
             }
             fusionGui.open((Player) sender);
+            return true;
+        }
+
+        if (sub.equals("quest") || sub.equals("nhiemvu")) {
+            if (args.length >= 2 && args[1].equalsIgnoreCase("reset")) {
+                if (!sender.hasPermission("nguyento.admin")) {
+                    sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
+                    return true;
+                }
+                Player t = args.length >= 3 ? Bukkit.getPlayerExact(args[2]) : null;
+                if (t == null) {
+                    sender.sendMessage("§eDùng: /nguyento quest reset <người chơi đang online>");
+                    return true;
+                }
+                quest.reset(t);
+                sender.sendMessage("§aĐã xóa tiến độ nhiệm vụ ô thứ 4 của " + t.getName() + ".");
+                return true;
+            }
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Lệnh này chỉ dành cho người chơi.");
+                return true;
+            }
+            sender.sendMessage("§6✦ Nhiệm vụ mở khóa ô nguyên tố thứ 4:");
+            for (String line : quest.lines((Player) sender)) sender.sendMessage("  " + line);
+            return true;
+        }
+
+        if (sub.equals("slot")) {
+            if (!sender.hasPermission("nguyento.admin")) {
+                sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
+                return true;
+            }
+            String action = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "";
+            Player t = args.length >= 3 ? Bukkit.getPlayerExact(args[2]) : null;
+            if (!(action.equals("give") || action.equals("remove") || action.equals("status")) || t == null) {
+                sender.sendMessage("§eDùng: /nguyento slot <give|remove|status> <người chơi đang online>");
+                return true;
+            }
+            if (action.equals("status")) {
+                sender.sendMessage("§e" + t.getName() + "§7: " + manager.maxSlots(t) + " ô nguyên tố"
+                        + (manager.hasExtraSlot(t) ? " (đã mở khóa ô thứ 4)" : " (chưa mở ô thứ 4)"));
+                return true;
+            }
+            if (action.equals("give")) {
+                if (!settings.extraSlotEnabled()) {
+                    sender.sendMessage("§cTính năng ô thứ 4 đang tắt trong config (extra-slot.enabled).");
+                    return true;
+                }
+                if (manager.hasExtraSlot(t)) {
+                    sender.sendMessage("§e" + t.getName() + " §7đã có ô thứ 4 rồi.");
+                    return true;
+                }
+                manager.setExtraSlot(t, true);
+                quest.announceUnlock(t, false);
+                sender.sendMessage("§aĐã cấp ô nguyên tố thứ 4 cho " + t.getName() + ".");
+            } else {
+                manager.setExtraSlot(t, false);
+                sender.sendMessage("§aĐã thu hồi ô nguyên tố thứ 4 của " + t.getName() + ".");
+                t.sendMessage("§cÔ nguyên tố thứ 4 của bạn đã bị thu hồi.");
+            }
             return true;
         }
 
@@ -180,10 +245,13 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         sender.sendMessage("§e/nguyento §7- mở menu nguyên tố");
         sender.sendMessage("§e/nguyento stats §7- xem chỉ số buff thật đang có");
         sender.sendMessage("§e/nguyento fusion §7- mở menu Hợp Thể (kết hợp 2 nguyên tố, mất 2 nguyên tố gốc)");
+        sender.sendMessage("§e/nguyento quest §7- xem tiến độ nhiệm vụ mở ô nguyên tố thứ 4");
         if (sender.hasPermission("nguyento.admin")) {
             sender.sendMessage("§e/nguyento give <người chơi> <nguyên tố|all> [số lượng] §7- đưa cuộn giấy");
             sender.sendMessage("§e/nguyento unlock <người chơi> <nguyên tố|all> §7- mở khóa trực tiếp");
             sender.sendMessage("§e/nguyento reset [người chơi] §7- bỏ trang bị + xóa buff kẹt, chỉ số về mặc định");
+            sender.sendMessage("§e/nguyento slot <give|remove|status> <người chơi> §7- cấp / thu hồi ô nguyên tố thứ 4");
+            sender.sendMessage("§e/nguyento quest reset <người chơi> §7- xóa tiến độ nhiệm vụ ô thứ 4");
             sender.sendMessage("§e/nguyento reload §7- tải lại config.yml");
         }
         return true;
@@ -204,9 +272,18 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         if (args.length == 1) {
             out.add("stats");
             out.add("fusion");
-            if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reset", "reload"));
+            out.add("quest");
+            if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reset", "reload", "slot"));
         } else if (sender.hasPermission("nguyento.admin")) {
-            if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock")
+            if (args.length == 2 && args[0].equalsIgnoreCase("slot")) {
+                out.addAll(Arrays.asList("give", "remove", "status"));
+            } else if (args.length == 3 && args[0].equalsIgnoreCase("slot")) {
+                for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
+            } else if (args.length == 2 && args[0].equalsIgnoreCase("quest")) {
+                out.add("reset");
+            } else if (args.length == 3 && args[0].equalsIgnoreCase("quest") && args[1].equalsIgnoreCase("reset")) {
+                for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
+            } else if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock")
                     || args[0].equalsIgnoreCase("reset"))) {
                 for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
             } else if (args.length == 3 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock"))) {

@@ -22,15 +22,17 @@ public class ElementGui implements Listener {
 
     private static final String TITLE = "§8✦ §5Nguyên Tố §8✦";
     private static final int SIZE = 45;
-    private static final int[] EQUIP_SLOTS = {2, 4, 6};
+    private static final int[] EQUIP_SLOTS = {1, 3, 5, 7};
     private static final int INFO_SLOT = 13;
     private static final int FUSION_SLOT = 22;
+    private static final int QUEST_SLOT = 24;
     private static final int CLEAR_SLOT = 40;
-    static final String[] SLOT_NAMES = {"Trên đầu", "Vai trái", "Vai phải"};
+    static final String[] SLOT_NAMES = {"Sau lưng", "Sau lưng", "Sau lưng", "Sau lưng"};
 
     private final ElementManager manager;
     private final Settings settings;
     private FusionGui fusionGui;
+    private QuestManager quest;
 
     public ElementGui(ElementManager manager, Settings settings) {
         this.manager = manager;
@@ -39,6 +41,18 @@ public class ElementGui implements Listener {
 
     public void setFusionGui(FusionGui fusionGui) {
         this.fusionGui = fusionGui;
+    }
+
+    public void setQuest(QuestManager quest) {
+        this.quest = quest;
+    }
+
+    /** Gửi tiến độ nhiệm vụ mở ô thứ 4 vào khung chat. */
+    private void showQuest(Player p) {
+        p.sendMessage("§6✦ Nhiệm vụ mở khóa ô nguyên tố thứ 4:");
+        if (quest == null) return;
+        for (String line : quest.lines(p)) p.sendMessage("  " + line);
+        p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.6f, 1.2f);
     }
 
     private static class Holder implements InventoryHolder {
@@ -68,13 +82,18 @@ public class ElementGui implements Listener {
         List<Element> eq = manager.getEquipped(p);
         List<Element> owned = manager.getOwned(p);
 
-        // 3 ô trang bị (có thể là nguyên tố thường hoặc hợp thể)
+        // các ô trang bị (3 ô, ô thứ 4 cần mở khóa)
+        int maxSlots = manager.maxSlots(p);
         for (int i = 0; i < EQUIP_SLOTS.length; i++) {
             if (i < eq.size()) {
                 Element e = eq.get(i);
                 inv.setItem(EQUIP_SLOTS[i], icon(e.getMaterial(),
                         "§eÔ " + (i + 1) + " • " + SLOT_NAMES[i] + "§7: " + e.colored(),
                         List.of("", "§7Click để §ctắt §7nguyên tố này"), true));
+            } else if (i >= maxSlots) {
+                inv.setItem(EQUIP_SLOTS[i], icon(Material.RED_STAINED_GLASS_PANE,
+                        "§cÔ " + (i + 1) + " • Chưa mở khóa",
+                        List.of("", "§7Hoàn thành §6nhiệm vụ khó §7hoặc nhờ", "§7admin cấp để mở ô này.", "", "§eClick để xem tiến độ nhiệm vụ"), false));
             } else {
                 inv.setItem(EQUIP_SLOTS[i], icon(Material.LIGHT_GRAY_STAINED_GLASS_PANE,
                         "§7Ô " + (i + 1) + " • " + SLOT_NAMES[i] + " §8(trống)",
@@ -88,11 +107,12 @@ public class ElementGui implements Listener {
             inv.setItem(e.getGuiSlot(), elementIcon(e, eq, owned));
         }
 
-        inv.setItem(INFO_SLOT, icon(Material.BOOK, "§eHướng dẫn", Arrays.asList(
+        List<String> help = new ArrayList<>(Arrays.asList(
+
                 "",
-                "§7Trang bị tối đa §f" + ElementManager.MAX_EQUIPPED + " §7nguyên tố.",
-                "§7• Ô 1: bay trên đầu",
-                "§7• Ô 2, 3: lơ lửng hai bên vai",
+                "§7Trang bị tối đa §f" + maxSlots + " §7nguyên tố §8(ô thứ 4: nhiệm vụ khó / admin cấp)§7.",
+                "§7• Nguyên tố xếp hình cánh quạt bay §fsau lưng",
+                "§7  bạn, kèm vòng ma pháp phát sáng",
                 "§7• Click nguyên tố để bật / tắt",
                 "§7• Nhận nguyên tố bằng cuộn giấy",
                 "",
@@ -104,12 +124,39 @@ public class ElementGui implements Listener {
                 "§8(Vật phẩm bất ly thân, không vứt/cất được)",
                 "",
                 "§dHợp thể §7(nút Đe ở giữa): kết hợp 2 nguyên tố,",
-                "§7chỉ chiếm §f1 ô §7nhưng mạnh hơn nhiều."), false));
+                "§7chỉ chiếm §f1 ô §7nhưng mạnh hơn nhiều."));
+        List<SetBonus> allSets = settings.sets();
+        if (!allSets.isEmpty()) {
+            List<SetBonus> active = settings.activeSets(eq);
+            help.add("");
+            help.add("§6Bộ cộng hưởng §7(trang bị đủ nguyên tố):");
+            for (SetBonus sb : allSets) {
+                StringBuilder names = new StringBuilder();
+                for (Element el : sb.elements) {
+                    if (names.length() > 0) names.append("§7 + ");
+                    names.append(el.colored());
+                }
+                help.add((active.contains(sb) ? "§a✔ " : "§7• ") + sb.colored() + "§7: " + names);
+                if (active.contains(sb)) help.add("§8   " + String.join(", ", sb.describe()));
+            }
+        }
+        inv.setItem(INFO_SLOT, icon(Material.BOOK, "§eHướng dẫn", help, false));
 
         inv.setItem(FUSION_SLOT, fusionButton(owned));
+        inv.setItem(QUEST_SLOT, questButton(p));
 
         inv.setItem(CLEAR_SLOT, icon(Material.BARRIER, "§cTắt tất cả",
                 List.of("", "§7Gỡ toàn bộ nguyên tố đang trang bị"), false));
+    }
+
+    private ItemStack questButton(Player p) {
+        List<String> lore = new ArrayList<>();
+        lore.add("");
+        if (quest != null) lore.addAll(quest.lines(p));
+        lore.add("");
+        lore.add("§eClick để gửi tiến độ vào khung chat");
+        boolean done = manager.hasExtraSlot(p);
+        return icon(Material.ENCHANTED_BOOK, (done ? "§a" : "§6") + "§lNhiệm vụ Ô Nguyên Tố Thứ 4", lore, done);
     }
 
     private ItemStack fusionButton(List<Element> owned) {
@@ -196,6 +243,12 @@ public class ElementGui implements Listener {
             }
         }
 
+        // click vào ô chưa mở khóa / nút nhiệm vụ -> xem tiến độ
+        for (int i = 0; i < EQUIP_SLOTS.length; i++) {
+            if (slot == EQUIP_SLOTS[i] && i >= manager.maxSlots(p)) showQuest(p);
+        }
+        if (slot == QUEST_SLOT) showQuest(p);
+
         // click vào nguyên tố gốc
         for (Element el : Element.values()) {
             if (!el.isFusion() && slot == el.getGuiSlot()) {
@@ -242,7 +295,7 @@ public class ElementGui implements Listener {
         }
         ElementManager.EquipResult r = manager.equip(p, el);
         if (r == ElementManager.EquipResult.FULL) {
-            p.sendMessage("§cBạn đã trang bị tối đa " + ElementManager.MAX_EQUIPPED
+            p.sendMessage("§cBạn đã trang bị tối đa " + manager.maxSlots(p)
                     + " nguyên tố! Hãy tắt bớt một nguyên tố trước.");
             p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.7f, 1f);
         } else if (r == ElementManager.EquipResult.OK) {
