@@ -15,15 +15,26 @@ import org.bukkit.inventory.ItemStack;
 public class ElementListener implements Listener {
 
     private final ElementManager manager;
+    private final Settings settings;
+    private FusionGui fusionGui;
 
-    public ElementListener(ElementManager manager) {
+    public ElementListener(ElementManager manager, Settings settings) {
         this.manager = manager;
+        this.settings = settings;
+    }
+
+    public void setFusionGui(FusionGui fusionGui) {
+        this.fusionGui = fusionGui;
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         manager.load(e.getPlayer());
-        if (!manager.getOwned(e.getPlayer()).isEmpty()) {
+        if (manager.keepsEquipped()) {
+            if (!manager.getEquipped(e.getPlayer()).isEmpty()) {
+                e.getPlayer().sendMessage("§7Đã khôi phục nguyên tố bạn đang trang bị. Gõ §f/nguyento §7để thay đổi.");
+            }
+        } else if (!manager.getOwned(e.getPlayer()).isEmpty()) {
             e.getPlayer().sendMessage("§7Nguyên tố đã được đặt lại khi bạn thoát game. Gõ §f/nguyento §7để trang bị lại.");
         }
     }
@@ -49,6 +60,15 @@ public class ElementListener implements Listener {
     public void onUseScroll(PlayerInteractEvent e) {
         if (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         ItemStack item = e.getItem();
+        if (manager.isUnfuseScroll(item)) {
+            e.setCancelled(true);
+            if (!settings.unfuseEnabled()) {
+                e.getPlayer().sendMessage("§cTính năng tách hợp thể đang tắt.");
+            } else if (fusionGui != null) {
+                fusionGui.openUnfuse(e.getPlayer());
+            }
+            return;
+        }
         Element el = manager.readScroll(item);
         if (el == null) return;
 

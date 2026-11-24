@@ -4,7 +4,13 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /** Đọc config.yml + sinh mô tả buff/nội tại/chiêu hiển thị trong GUI. */
 public class Settings {
@@ -17,10 +23,14 @@ public class Settings {
     }
 
     private List<SetBonus> cachedSets = null;
+    private Map<Element, Set<Element>> counterTable = null;
+    private Map<String, Element> mobElements = null;
 
     public void reload() {
         plugin.reloadConfig();
         cachedSets = null;
+        counterTable = null;
+        mobElements = null;
     }
 
     public org.bukkit.configuration.file.FileConfiguration cfg() {
@@ -35,6 +45,75 @@ public class Settings {
     /** Có nhiệm vụ để mở ô thứ 4 không (false = chỉ admin cấp). */
     public boolean questEnabled() {
         return plugin.getConfig().getBoolean("extra-slot.quest.enabled", true);
+    }
+
+    // ---------------- Vòng tương khắc ----------------
+
+    public boolean counterEnabled() {
+        return plugin.getConfig().getBoolean("counter.enabled", true);
+    }
+
+    public double counterBonusPercent() {
+        return Math.max(0.0, plugin.getConfig().getDouble("counter.bonus-percent", 20.0));
+    }
+
+    public double counterPenaltyPercent() {
+        return Math.max(0.0, Math.min(100.0, plugin.getConfig().getDouble("counter.penalty-percent", 20.0)));
+    }
+
+    /** Bảng tương khắc đọc từ config (counter.pairs): nguyên tố -> các nguyên tố nó khắc. */
+    public Map<Element, Set<Element>> counterTable() {
+        if (counterTable == null) {
+            Map<Element, Set<Element>> m = new EnumMap<>(Element.class);
+            org.bukkit.configuration.ConfigurationSection sec = plugin.getConfig().getConfigurationSection("counter.pairs");
+            if (sec != null) {
+                for (String key : sec.getKeys(false)) {
+                    Element a = Element.fromId(key);
+                    if (a == null) continue;
+                    Set<Element> beaten = EnumSet.noneOf(Element.class);
+                    for (String id : sec.getStringList(key)) {
+                        Element b = Element.fromId(id);
+                        if (b != null && b != a) beaten.add(b);
+                    }
+                    if (!beaten.isEmpty()) m.put(a, beaten);
+                }
+            }
+            counterTable = m;
+        }
+        return counterTable;
+    }
+
+    /** a có khắc b không (theo config counter.pairs). */
+    public boolean counters(Element a, Element b) {
+        Set<Element> s = counterTable().get(a);
+        return s != null && s.contains(b);
+    }
+
+    /** Nguyên tố "tự nhiên" của một loại quái (config counter.mobs), null nếu không khai báo. */
+    public Element mobElement(String entityType) {
+        if (mobElements == null) {
+            Map<String, Element> m = new HashMap<>();
+            org.bukkit.configuration.ConfigurationSection sec = plugin.getConfig().getConfigurationSection("counter.mobs");
+            if (sec != null) {
+                for (String key : sec.getKeys(false)) {
+                    Element e = Element.fromId(sec.getString(key));
+                    if (e != null) m.put(key.toUpperCase(Locale.ROOT), e);
+                }
+            }
+            mobElements = m;
+        }
+        return mobElements.get(entityType.toUpperCase(Locale.ROOT));
+    }
+
+    // ---------------- Cuộn Tách Hợp Thể ----------------
+
+    public boolean unfuseEnabled() {
+        return plugin.getConfig().getBoolean("unfuse.enabled", true);
+    }
+
+    /** Số cấp độ tốn mỗi lần tách hợp thể (ngoài việc tiêu hao 1 cuộn). */
+    public int unfuseCostLevels() {
+        return Math.max(0, plugin.getConfig().getInt("unfuse.cost-levels", 0));
     }
 
     /** Giữ nguyên nguyên tố đã trang bị khi người chơi thoát rồi vào lại (general.keep-equipped-on-rejoin, mặc định bật). */

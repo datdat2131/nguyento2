@@ -101,6 +101,19 @@ public class SkillManager implements Listener {
     private boolean busy = false;
     private int hudCounter = 0;
     private BukkitTask mainTask;
+    private EnergyManager energy;
+
+    public void setEnergy(EnergyManager energy) {
+        this.energy = energy;
+    }
+
+    private boolean energyOn() {
+        return energy != null && energy.enabled();
+    }
+
+    private static boolean isSkillKey(String key) {
+        return CD_DOMAIN.equals(key) || CD_DIVINE.equals(key) || CD_BREATH.equals(key);
+    }
 
     public SkillManager(NguyenToPlugin plugin, ElementManager manager, Settings settings) {
         this.plugin = plugin;
@@ -152,11 +165,21 @@ public class SkillManager implements Listener {
     }
 
     private void startCooldown(Player p, String key, double seconds) {
+        if (energyOn() && isSkillKey(key)) {
+            energy.consume(p); // chế độ thanh năng lượng: dùng chiêu thì trừ năng lượng thay vì đặt hồi chiêu
+            return;
+        }
         cooldowns.computeIfAbsent(p.getUniqueId(), k -> new HashMap<>())
                 .put(key, System.currentTimeMillis() + (long) (seconds * 1000));
     }
 
     private boolean checkReady(Player p, String key) {
+        if (energyOn() && isSkillKey(key)) {
+            if (energy.ready(p)) return true;
+            Fx.actionBar(p, "§cNăng lượng chưa đủ: §f" + (int) energy.get(p) + "§7/§f" + (int) energy.cost());
+            p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.6f, 1.2f);
+            return false;
+        }
         long r = remainingMs(p, key);
         if (r > 0) {
             Fx.actionBar(p, "§cChiêu đang hồi: §f" + (r / 1000 + 1) + "s");
@@ -183,6 +206,7 @@ public class SkillManager implements Listener {
             boolean hud = settings.gb("show-skill-hud") && hudCounter % 20 == 0;
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (manager.has(p, Element.ANH_SANG)) tickShield(p);
+                if (energy != null) energy.tick(p, hudCounter % 20 == 0);
                 if (hud) hud(p);
             }
         }, 4L, 4L);
@@ -222,6 +246,10 @@ public class SkillManager implements Listener {
     }
 
     private String hudPart(Player p, String name, String key) {
+        if (energyOn() && isSkillKey(key)) {
+            String st = energy.ready(p) ? "§aSẵn sàng" : "§e" + (int) (100.0 * energy.get(p) / energy.cost()) + "%";
+            return name + " §8» " + st;
+        }
         long r = remainingMs(p, key);
         String state = r > 0 ? "§c" + (r / 1000 + 1) + "s" : "§aSẵn sàng";
         return name + " §8» " + state;
@@ -944,7 +972,7 @@ public class SkillManager implements Listener {
             final LivingEntity le = (LivingEntity) ent;
             runBusy(() -> {
                 le.setNoDamageTicks(0);
-                le.damage(damage * settings.pvp(le), caster);
+                le.damage(damage * settings.pvp(le) * manager.counterMultiplier(caster, le), caster);
             });
             le.setVelocity(le.getVelocity().add(new Vector(0, 0.5, 0)));
             if (Vfx.on()) {
@@ -1023,7 +1051,7 @@ public class SkillManager implements Listener {
             final LivingEntity le = (LivingEntity) ent;
             runBusy(() -> {
                 le.setNoDamageTicks(0);
-                le.damage(dmg * settings.pvp(le), owner);
+                le.damage(dmg * settings.pvp(le) * manager.counterMultiplier(owner, le), owner);
             });
             if (Vfx.on()) {
                 Location l = le.getLocation().add(0, 1, 0);

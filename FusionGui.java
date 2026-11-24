@@ -48,6 +48,8 @@ public class FusionGui implements Listener {
 
     private static class Holder implements InventoryHolder {
         Inventory inv;
+        /** true = menu Tách Hợp Thể (mở bằng Cuộn Tách Hợp Thể), false = menu Kết hợp. */
+        boolean unfuse;
 
         @Override
         public Inventory getInventory() { return inv; }
@@ -66,6 +68,18 @@ public class FusionGui implements Listener {
         for (Element e : Element.values()) {
             if (e.isFusion()) fusions.add(e);
         }
+    }
+
+    /** Menu Tách Hợp Thể: trả một hợp thể đang sở hữu về hai nguyên tố gốc (tiêu hao 1 Cuộn Tách Hợp Thể). */
+    public void openUnfuse(Player p) {
+        Holder holder = new Holder();
+        holder.unfuse = true;
+        Inventory inv = Bukkit.createInventory(holder, SIZE, "§8✦ §dTách Hợp Thể §8✦");
+        holder.inv = inv;
+        pending.remove(p.getUniqueId());
+        render(inv, p);
+        p.openInventory(inv);
+        p.playSound(p.getLocation(), Sound.BLOCK_SMITHING_TABLE_USE, 0.7f, 0.8f);
     }
 
     public void open(Player p) {
@@ -92,7 +106,126 @@ public class FusionGui implements Listener {
         return pd;
     }
 
+    private void renderUnfuse(Inventory inv, Player p) {
+        ItemStack filler = icon(Material.GRAY_STAINED_GLASS_PANE, " ", List.of(), false);
+        for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, filler);
+
+        List<Element> owned = manager.getOwned(p);
+        Pending pd = activePending(p);
+        int scrolls = manager.countUnfuseScrolls(p);
+        for (int i = 0; i < fusions.size() && i < FUSION_SLOTS.length; i++) {
+            Element f = fusions.get(i);
+            List<Element> parts = f.getParts();
+            List<String> lore = new ArrayList<>();
+            lore.add(f.rarityLine());
+            lore.add("");
+            if (!owned.contains(f)) {
+                lore.add("§cBạn chưa sở hữu hợp thể này");
+                inv.setItem(FUSION_SLOTS[i], icon(Material.GRAY_DYE, "§8✖ §7Hợp thể " + f.getName(), lore, false));
+                continue;
+            }
+            if (parts.size() == 2) {
+                lore.add("§7Nhận lại: " + parts.get(0).colored() + " §7+ " + parts.get(1).colored());
+                for (Element part : parts) {
+                    if (owned.contains(part)) lore.add("§8(Đã có " + part.getName() + " sẵn, không nhận thêm bản thứ hai)");
+                }
+            }
+            lore.add("§cBạn sẽ MẤT hợp thể " + f.colored());
+            lore.add("§7Tiêu hao: §f1 Cuộn Tách Hợp Thể §8(bạn có " + scrolls + ")");
+            int cost = settings.unfuseCostLevels();
+            if (cost > 0) lore.add("§7Phí: §e" + cost + " §7cấp độ");
+            lore.add("");
+            if (pd != null && pd.element == f) {
+                lore.add("§e§l⚠ Click lần nữa để XÁC NHẬN TÁCH");
+            } else {
+                lore.add("§aClick để tách §8(cần xác nhận)");
+            }
+            inv.setItem(FUSION_SLOTS[i], icon(f.getMaterial(), f.getColor() + "§l" + f.getName(), lore, true));
+        }
+
+        List<String> info = new ArrayList<>();
+        info.add("");
+        info.add("§7Chọn một hợp thể bạn đang sở hữu để tách.");
+        info.add("§7Hợp thể biến mất, bạn nhận lại §fhai nguyên tố gốc§7.");
+        info.add("§7Cần click §fhai lần §7để xác nhận.");
+        info.add("");
+        info.add("§7Cuộn Tách Hợp Thể đang có: §d" + scrolls);
+        inv.setItem(INFO_SLOT, icon(Material.BOOK, "§e§lHướng dẫn Tách Hợp Thể", info, false));
+        inv.setItem(BACK_SLOT, icon(Material.BARRIER, "§7Đóng", List.of(), false));
+    }
+
+    private void clickUnfuse(Player p, int slot, Inventory top) {
+        UUID id = p.getUniqueId();
+        if (slot == BACK_SLOT) {
+            pending.remove(id);
+            p.closeInventory();
+            return;
+        }
+        for (int i = 0; i < fusions.size() && i < FUSION_SLOTS.length; i++) {
+            if (slot != FUSION_SLOTS[i]) continue;
+            doUnfuse(p, fusions.get(i));
+            renderUnfuse(top, p);
+            p.updateInventory();
+        }
+    }
+
+    private void doUnfuse(Player p, Element f) {
+        UUID id = p.getUniqueId();
+        List<Element> parts = f.getParts();
+        if (!manager.owns(p, f)) {
+            pending.remove(id);
+            p.sendMessage("§cBạn chưa sở hữu hợp thể " + f.colored() + "§c.");
+            p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.7f, 1f);
+            return;
+        }
+        if (manager.countUnfuseScrolls(p) <= 0) {
+            pending.remove(id);
+            p.sendMessage("§cBạn cần có Cuộn Tách Hợp Thể để tách.");
+            p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.7f, 1f);
+            return;
+        }
+        int cost = settings.unfuseCostLevels();
+        if (cost > 0 && p.getGameMode() != GameMode.CREATIVE && p.getLevel() < cost) {
+            pending.remove(id);
+            p.sendMessage("§cCần §e" + cost + " §ccấp độ để tách (bạn có " + p.getLevel() + ").");
+            p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.7f, 1f);
+            return;
+        }
+        Pending pd = activePending(p);
+        if (pd == null || pd.element != f) {
+            pending.put(id, new Pending(f, System.currentTimeMillis() + CONFIRM_MS));
+            p.sendMessage("§e⚠ Tách hợp thể " + f.colored() + " §esẽ làm bạn §cMẤT §ehợp thể này và nhận lại "
+                    + (parts.size() == 2 ? parts.get(0).colored() + " §e+ " + parts.get(1).colored() : "hai nguyên tố gốc")
+                    + "§e. Click lần nữa trong 10 giây để xác nhận.");
+            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.8f, 1.4f);
+            return;
+        }
+        pending.remove(id);
+        ElementManager.UnfuseResult r = manager.unfuse(p, f);
+        switch (r) {
+            case OK:
+                p.sendTitle("§d§l✦ TÁCH HỢP THỂ ✦", f.colored() + " §7đã tách ra!", 5, 40, 15);
+                p.sendMessage("§d✦ Đã tách hợp thể " + f.colored() + "§d. §7Bạn nhận lại "
+                        + (parts.size() == 2 ? parts.get(0).colored() + " §7và " + parts.get(1).colored() : "hai nguyên tố gốc") + "§7.");
+                FusionFx.unfuseBurst(p, f);
+                break;
+            case NO_SCROLL:
+                p.sendMessage("§cBạn cần có Cuộn Tách Hợp Thể để tách.");
+                break;
+            case NO_LEVELS:
+                p.sendMessage("§cCần §e" + cost + " §ccấp độ để tách.");
+                break;
+            default:
+                p.sendMessage("§cKhông thể tách hợp thể này.");
+                break;
+        }
+    }
+
     private void render(Inventory inv, Player p) {
+        if (inv.getHolder() instanceof Holder && ((Holder) inv.getHolder()).unfuse) {
+            renderUnfuse(inv, p);
+            return;
+        }
         ItemStack filler = icon(Material.GRAY_STAINED_GLASS_PANE, " ", List.of(), false);
         for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, filler);
 
@@ -212,6 +345,11 @@ public class FusionGui implements Listener {
 
         int slot = e.getRawSlot();
         UUID id = p.getUniqueId();
+
+        if (top.getHolder() instanceof Holder && ((Holder) top.getHolder()).unfuse) {
+            clickUnfuse(p, slot, top);
+            return;
+        }
 
         if (slot == BACK_SLOT) {
             pending.remove(id);

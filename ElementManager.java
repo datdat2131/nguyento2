@@ -50,6 +50,8 @@ public class ElementManager {
 
     public enum FuseResult { OK, NOT_FUSION, ALREADY, MISSING, NO_LEVELS }
 
+    public enum UnfuseResult { OK, NOT_FUSION, NOT_OWNED, NO_SCROLL, NO_LEVELS }
+
     private static class Orbit {
         final Element element;
         final ItemDisplay display;
@@ -83,6 +85,7 @@ public class ElementManager {
     private final NamespacedKey ownedKey;
     private final NamespacedKey equippedKey;
     private final NamespacedKey scrollKey;
+    private final NamespacedKey unfuseKey;
     private final NamespacedKey statFlagKey;
     private final NamespacedKey extraSlotKey;
     private QuestManager quest;
@@ -101,7 +104,11 @@ public class ElementManager {
     private double density = 0.6;
     private float viewRange = 0.5f;
     // kiểu nguyên tố bay quanh người (config: orbit.*)
-    private boolean backStyle = true;
+    private boolean ringStyle = true;   // vòng tròn quay sau lưng (kiểu Cầu Lục Đạo)
+    private boolean backStyle = false;  // hình cánh quạt sau lưng
+    private double ringRadius = 1.15;
+    private double ringSpeed = 1.3 / 20.0; // rad mỗi tick
+    private double ringDist = 0.8;
     private double backDist = 0.95;
     private double spreadRad = Math.toRadians(50);
     private double heightFactor = 1.0;
@@ -119,6 +126,7 @@ public class ElementManager {
         this.ownedKey = new NamespacedKey(plugin, "owned");
         this.equippedKey = new NamespacedKey(plugin, "equipped");
         this.scrollKey = new NamespacedKey(plugin, "scroll");
+        this.unfuseKey = new NamespacedKey(plugin, "unfuse_scroll");
         this.statFlagKey = new NamespacedKey(plugin, "statflag");
         this.extraSlotKey = new NamespacedKey(plugin, "extra_slot");
     }
@@ -591,6 +599,133 @@ public class ElementManager {
         return item;
     }
 
+    /** Cuộn Tách Hợp Thể: trả một hợp thể về 2 nguyên tố gốc (dùng trong menu tách). */
+    public ItemStack createUnfuseScroll(int amount) {
+        ItemStack item = new ItemStack(Material.PAPER, Math.max(1, amount));
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName("§d✦ Cuộn Tách Hợp Thể ✦");
+        List<String> lore = new ArrayList<>();
+        lore.add("§d§l✦ VẬT PHẨM ĐẶC BIỆT ✦");
+        lore.add("");
+        lore.add("§7Nhấn §fchuột phải §7để mở menu tách.");
+        lore.add("§7Một hợp thể sẽ được §ftrả về hai nguyên tố gốc§7.");
+        lore.add("§8Mỗi lần tách tiêu hao 1 cuộn");
+        meta.setLore(lore);
+        addGlow(meta);
+        meta.getPersistentDataContainer().set(unfuseKey, PersistentDataType.INTEGER, 1);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public boolean isUnfuseScroll(ItemStack item) {
+        if (item == null || item.getType() != Material.PAPER || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(unfuseKey, PersistentDataType.INTEGER);
+    }
+
+    public int countUnfuseScrolls(Player p) {
+        int n = 0;
+        for (ItemStack it : p.getInventory().getContents()) {
+            if (isUnfuseScroll(it)) n += it.getAmount();
+        }
+        return n;
+    }
+
+    private boolean consumeUnfuseScroll(Player p) {
+        ItemStack[] contents = p.getInventory().getContents();
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack it = contents[i];
+            if (!isUnfuseScroll(it)) continue;
+            if (it.getAmount() <= 1) {
+                p.getInventory().setItem(i, null);
+            } else {
+                it.setAmount(it.getAmount() - 1);
+                p.getInventory().setItem(i, it);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Tách hợp thể: tiêu hao 1 Cuộn Tách Hợp Thể (+ cấp độ nếu config có đặt), mất hợp thể, nhận lại 2 nguyên tố gốc
+     * (nguyên tố gốc nào đã có sẵn thì không nhận thêm bản thứ hai).
+     */
+    public UnfuseResult unfuse(Player p, Element f) {
+        if (!f.isFusion()) return UnfuseResult.NOT_FUSION;
+        List<Element> owned = getOwned(p);
+        if (!owned.contains(f)) return UnfuseResult.NOT_OWNED;
+        if (countUnfuseScrolls(p) <= 0) return UnfuseResult.NO_SCROLL;
+        int cost = settings.unfuseCostLevels();
+        boolean pay = cost > 0 && p.getGameMode() != GameMode.CREATIVE;
+        if (pay && p.getLevel() < cost) return UnfuseResult.NO_LEVELS;
+        if (!consumeUnfuseScroll(p)) return UnfuseResult.NO_SCROLL;
+        if (pay) p.setLevel(p.getLevel() - cost);
+
+        owned.remove(f);
+        for (Element part : f.getParts()) {
+            if (!owned.contains(part)) owned.add(part);
+        }
+        p.getPersistentDataContainer().set(ownedKey, PersistentDataType.STRING, join(owned));
+
+        List<Element> eq = equipped.get(p.getUniqueId());
+        if (eq != null && eq.remove(f)) refreshAfterChange(p);
+        return UnfuseResult.OK;
+    }
+
+    // ------------------------------------------------------------------
+    //  Vòng tương khắc
+    // ------------------------------------------------------------------
+
+    /** Các loại nguyên tố gốc đang mang (hợp thể bung ra thành 2 thành phần). */
+    private static Set<Element> typesOf(List<Element> list) {
+        Set<Element> out = java.util.EnumSet.noneOf(Element.class);
+        for (Element e : list) {
+            if (e.isFusion()) {
+                out.addAll(e.getParts());
+            } else {
+                out.add(e);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Hệ số sát thương theo tương khắc khi 'attacker' đánh 'target': có nguyên tố khắc mục tiêu thì cộng thêm
+     * counter.bonus-percent, bị mục tiêu khắc ngược thì trừ counter.penalty-percent. Mục tiêu là người chơi dùng
+     * nguyên tố đang mang, là quái dùng nguyên tố khai báo ở counter.mobs. Không có thông tin thì trả 1.0.
+     */
+    public double counterMultiplier(Player attacker, LivingEntity target) {
+        if (!settings.counterEnabled()) return 1.0;
+        Set<Element> mine = typesOf(getEquipped(attacker));
+        if (mine.isEmpty()) return 1.0;
+        Set<Element> theirs;
+        if (target instanceof Player) {
+            theirs = typesOf(getEquipped((Player) target));
+        } else {
+            Element natural = settings.mobElement(target.getType().name());
+            if (natural == null) return 1.0;
+            theirs = java.util.EnumSet.of(natural);
+        }
+        if (theirs.isEmpty()) return 1.0;
+        boolean advantage = false;
+        boolean disadvantage = false;
+        for (Element a : mine) {
+            for (Element b : theirs) {
+                if (settings.counters(a, b)) advantage = true;
+                if (settings.counters(b, a)) disadvantage = true;
+            }
+        }
+        double m = 1.0;
+        if (advantage) m *= 1.0 + settings.counterBonusPercent() / 100.0;
+        if (disadvantage) m *= Math.max(0.0, 1.0 - settings.counterPenaltyPercent() / 100.0);
+        return m;
+    }
+
+    /** Có đang giữ nguyên trang bị khi thoát vào lại không (để thông báo cho đúng). */
+    public boolean keepsEquipped() {
+        return settings.keepEquipped();
+    }
+
     public Element readScroll(ItemStack item) {
         if (item == null || item.getType() != Material.PAPER || !item.hasItemMeta()) return null;
         String id = item.getItemMeta().getPersistentDataContainer().get(scrollKey, PersistentDataType.STRING);
@@ -632,7 +767,12 @@ public class ElementManager {
         particlesOn = settings.pb("particles");
         density = Math.max(0.0, Math.min(2.0, settings.perf("particle-density")));
         viewRange = (float) (Math.max(8.0, settings.perf("view-range-blocks")) / 64.0);
-        backStyle = !"classic".equalsIgnoreCase(plugin.getConfig().getString("orbit.style", "back"));
+        String style = plugin.getConfig().getString("orbit.style", "ring").toLowerCase(java.util.Locale.ROOT);
+        backStyle = style.equals("back");
+        ringStyle = !style.equals("back") && !style.equals("classic");
+        ringRadius = Math.max(0.5, Math.min(3.0, plugin.getConfig().getDouble("orbit.ring-radius", 1.15)));
+        ringSpeed = Math.max(-6.0, Math.min(6.0, plugin.getConfig().getDouble("orbit.ring-speed", 1.3))) / 20.0;
+        ringDist = Math.max(0.2, Math.min(3.0, plugin.getConfig().getDouble("orbit.ring-distance", 0.8)));
         backDist = Math.max(0.3, Math.min(3.0, plugin.getConfig().getDouble("orbit.back-distance", 0.95)));
         spreadRad = Math.toRadians(Math.max(0.0, Math.min(90.0, plugin.getConfig().getDouble("orbit.spread-degrees", 50.0))));
         heightFactor = Math.max(0.3, Math.min(1.6, plugin.getConfig().getDouble("orbit.height", 1.0)));
@@ -837,6 +977,18 @@ public class ElementManager {
         double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
         double fx = -Math.sin(yaw), fz = Math.cos(yaw);
 
+        if (ringStyle) {
+            // các nguyên tố nối đuôi nhau bay thành một vòng tròn thẳng đứng quay sau lưng (kiểu Cầu Lục Đạo)
+            double ang = tick * ringSpeed + slot * 2 * Math.PI / Math.max(1, n);
+            double ox = Math.cos(ang) * ringRadius;
+            double oy = Math.sin(ang) * ringRadius;
+            return new Location(pl.getWorld(),
+                    pl.getX() + rx * ox + fx * (-ringDist),
+                    pl.getY() + height * 0.9 * heightFactor + oy,
+                    pl.getZ() + rz * ox + fz * (-ringDist),
+                    pl.getYaw(), 0f);
+        }
+
         double side, y, back;
         if (backStyle) {
             double lane = lane(slot, n);
@@ -870,7 +1022,12 @@ public class ElementManager {
         float s;
         Vector3f translation;
         Quaternionf q;
-        if (backStyle) {
+        if (ringStyle) {
+            float spin = (float) (when * 0.1 + slot * 1.7);
+            q = new Quaternionf().rotateY(spin);
+            translation = new Vector3f(0f, 0f, 0f);
+            s = 0.9f;
+        } else if (backStyle) {
             double lane = lane(slot, n);
             float spin = (float) (when * 0.08 + slot * 1.7);
             q = new Quaternionf().rotateZ((float) (-lane * 0.3)).rotateY(spin);
@@ -896,7 +1053,7 @@ public class ElementManager {
 
     /** Vòng ma pháp phát sáng xoay chậm sau lưng, màu theo các nguyên tố đang trang bị (chỉ kiểu back, config orbit.ring). */
     private void backRing(Location pl, double height, List<Orbit> list) {
-        if (!backStyle || !ringOn || !particlesOn || density <= 0 || list.isEmpty()) return;
+        if (!(ringStyle || backStyle) || !ringOn || !particlesOn || density <= 0 || list.isEmpty()) return;
         Orbit first = list.get(0);
         if (tick < first.nextRing) return;
         first.nextRing = tick + 6;
@@ -904,10 +1061,22 @@ public class ElementManager {
         double yaw = Math.toRadians(pl.getYaw());
         double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
         double fx = -Math.sin(yaw), fz = Math.cos(yaw);
-        double radius = Math.max(0.5, height * 0.52);
-        double cx = pl.getX() + fx * (-backDist * 0.55);
-        double cy = pl.getY() + height * 0.62 * heightFactor;
-        double cz = pl.getZ() + fz * (-backDist * 0.55);
+        double radius;
+        double cx;
+        double cy;
+        double cz;
+        if (ringStyle) {
+            // vòng bụi mờ đúng quỹ đạo của các nguyên tố
+            radius = ringRadius;
+            cx = pl.getX() + fx * (-ringDist);
+            cy = pl.getY() + height * 0.9 * heightFactor;
+            cz = pl.getZ() + fz * (-ringDist);
+        } else {
+            radius = Math.max(0.5, height * 0.52);
+            cx = pl.getX() + fx * (-backDist * 0.55);
+            cy = pl.getY() + height * 0.62 * heightFactor;
+            cz = pl.getZ() + fz * (-backDist * 0.55);
+        }
         World w = pl.getWorld();
         int n = Math.max(6, scaled(18));
         double rot = tick * 0.05;

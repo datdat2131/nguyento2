@@ -413,6 +413,43 @@ public final class FusionFx {
     }
 
     // ------------------------------------------------------------------
+    //  Tách hợp thể: hai nguyên tố gốc bung ra
+    // ------------------------------------------------------------------
+
+    public static void unfuseBurst(final Player p, final Element f) {
+        World w = p.getWorld();
+        Location l = p.getLocation();
+        w.playSound(l, Sound.BLOCK_AMETHYST_CLUSTER_BREAK, 1.2f, 0.8f);
+        w.playSound(l, Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.1f);
+        if (!Vfx.on()) return;
+        final List<Element> parts = f.getParts();
+        Vfx.flash(w, l.clone().add(0, 1, 0));
+        for (Element part : parts) {
+            w.spawnParticle(part.getParticle(), l.clone().add(0, 1, 0), Vfx.pts(40, 15), 0.4, 0.6, 0.4, 0.15);
+        }
+        new BukkitRunnable() {
+            int t = 0;
+
+            @Override
+            public void run() {
+                if (!p.isOnline()) {
+                    cancel();
+                    return;
+                }
+                t++;
+                Location base = p.getLocation();
+                World pw = base.getWorld();
+                double rr = 0.6 + t * 0.45;
+                for (int i = 0; i < parts.size(); i++) {
+                    Vfx.dustRing(pw, base, rr, 0.2 + i * 0.7, Vfx.pts(24, 10), (i == 0 ? 1 : -1) * t * 0.4,
+                            Vfx.colorOf(parts.get(i)), 1.6f);
+                }
+                if (t >= 7) cancel();
+            }
+        }.runTaskTimer(plugin(), 0L, 2L);
+    }
+
+    // ------------------------------------------------------------------
     //  Kết hợp thành công
     // ------------------------------------------------------------------
 

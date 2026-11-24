@@ -37,6 +37,11 @@ public class CombatListener implements Listener {
     private final SkillManager skills;
     private final Marks marks;
     private final Random rnd = new Random();
+    private EnergyManager energy;
+
+    public void setEnergy(EnergyManager energy) {
+        this.energy = energy;
+    }
 
     public CombatListener(NguyenToPlugin plugin, ElementManager manager, Settings settings, SkillManager skills,
                           Marks marks) {
@@ -111,7 +116,7 @@ public class CombatListener implements Listener {
             if (!target.isValid() || target.isDead() || !skills.validTarget(attacker, target)) return;
             skills.runBusy(() -> {
                 target.setNoDamageTicks(0);
-                target.damage(dmg * outgoing(attacker) * settings.pvp(target), attacker);
+                target.damage(dmg * outgoing(attacker) * settings.pvp(target) * manager.counterMultiplier(attacker, target), attacker);
             });
         });
     }
@@ -241,6 +246,18 @@ public class CombatListener implements Listener {
         double mult = outgoing(attacker);
         if (mult != 1.0) e.setDamage(e.getDamage() * mult);
 
+        // 4) Vòng tương khắc nguyên tố
+        double counter = manager.counterMultiplier(attacker, victim);
+        if (counter != 1.0) {
+            e.setDamage(e.getDamage() * counter);
+            if (!marks.has(attacker.getUniqueId(), "counter_msg")) {
+                marks.set(attacker.getUniqueId(), "counter_msg", 1.5, 1.0);
+                Fx.actionBar(attacker, counter > 1.0
+                        ? "§a▲ Khắc chế nguyên tố! §7(x" + String.format("%.2f", counter) + ")"
+                        : "§c▼ Bị nguyên tố khắc chế! §7(x" + String.format("%.2f", counter) + ")");
+            }
+        }
+
         // trong Lãnh Địa Bóng Tối: +sát thương
         if (skills.isInDomain(attacker)) {
             e.setDamage(e.getDamage() + settings.n(Element.BONG_TOI, "skill.owner-bonus-damage"));
@@ -266,7 +283,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * settings.pvp(le), attacker);
+                    le.damage(dmg * settings.pvp(le) * manager.counterMultiplier(attacker, le), attacker);
                 });
             }
         });
@@ -294,7 +311,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult * settings.pvp(le), attacker);
+                    le.damage(dmg * mult * settings.pvp(le) * manager.counterMultiplier(attacker, le), attacker);
                 });
                 if (igniteSeconds > 0) le.setFireTicks(Math.max(le.getFireTicks(), (int) (igniteSeconds * 20)));
             }
@@ -318,7 +335,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult * settings.pvp(le), attacker);
+                    le.damage(dmg * mult * settings.pvp(le) * manager.counterMultiplier(attacker, le), attacker);
                 });
                 le.setVelocity(le.getVelocity().add(new Vector(0, 0.6, 0)));
             }
@@ -343,7 +360,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult * settings.pvp(le), attacker);
+                    le.damage(dmg * mult * settings.pvp(le) * manager.counterMultiplier(attacker, le), attacker);
                 });
                 Fx.addEffect(le, (int) (secs * 20), amp, true, "SLOW", "SLOWNESS");
             }
@@ -394,7 +411,7 @@ public class CombatListener implements Listener {
                 final double d = dmg * (burning ? 1.0 + burnBonus : 1.0) * mult;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(d * settings.pvp(le), attacker);
+                    le.damage(d * settings.pvp(le) * manager.counterMultiplier(attacker, le), attacker);
                 });
                 slow(le, slowSeconds, 15);               // Giảm Tốc I
                 if (wet && roll(stunChance)) {
@@ -430,7 +447,7 @@ public class CombatListener implements Listener {
                 final LivingEntity le = (LivingEntity) ent;
                 skills.runBusy(() -> {
                     le.setNoDamageTicks(0);
-                    le.damage(dmg * mult * settings.pvp(le), attacker);
+                    le.damage(dmg * mult * settings.pvp(le) * manager.counterMultiplier(attacker, le), attacker);
                 });
                 slow(le, slowSecs, slowPct);
                 if (roll(knockChance)) le.setVelocity(le.getVelocity().add(new Vector(0, 0.45, 0)));
@@ -545,7 +562,7 @@ public class CombatListener implements Listener {
                     || !skills.validTarget(attacker, victim)) return;
             skills.runBusy(() -> {
                 victim.setNoDamageTicks(0);
-                victim.damage(dmg * outgoing(attacker) * settings.pvp(victim), attacker);
+                victim.damage(dmg * outgoing(attacker) * settings.pvp(victim) * manager.counterMultiplier(attacker, victim), attacker);
             });
             marks.set(victim, dark ? Marks.DARK : Marks.HOLY, markSecs);
         });
@@ -578,6 +595,8 @@ public class CombatListener implements Listener {
         if (skills.isBusy()) return;
         Player a = attackerOf(e.getDamager());
         if (a == null || e.getEntity().equals(a) || !(e.getEntity() instanceof LivingEntity)) return;
+
+        if (energy != null) energy.onHit(a);
 
         double pct = 0;
         for (Element el : manager.getEquipped(a)) pct += settings.n(el, "lifesteal-percent");
@@ -619,6 +638,7 @@ public class CombatListener implements Listener {
 
         List<Element> eq = manager.getEquipped(v);
         if (eq.isEmpty()) return;
+        if (energy != null) energy.onDamaged(v);
 
         // Giảm sát thương vĩnh viễn (Ánh Sáng, Thánh Long...)
         double red = 0;

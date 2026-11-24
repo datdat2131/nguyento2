@@ -5,7 +5,7 @@ import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
-import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.Statistic;
 import org.bukkit.entity.Enemy;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -13,27 +13,27 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
 
 /**
- * Nhiệm vụ khó để mở khóa ô nguyên tố thứ 4 (hoặc admin cấp). Mọi mục tiêu chỉnh trong config.yml, mục extra-slot.quest.
- * Tiến độ lưu trong dữ liệu của từng người chơi nên không mất khi thoát game / tắt server.
+ * Nhiệm vụ khó để mở khóa ô nguyên tố thứ 4 (hoặc admin cấp). Cần hoàn thành TẤT CẢ mục tiêu đang bật:
+ * hạ N người chơi KHÁC NHAU, hạ N quái, hoàn thành N cổng dungeon từ một rank trở lên, online đủ N giờ.
+ * Mọi con số chỉnh trong config.yml (extra-slot.quest). Tiến độ lưu theo người chơi, không mất khi thoát game.
  */
 public class QuestManager implements Listener {
 
-    private static final int DEF_MOBS = 500;
-    private static final int DEF_PLAYERS = 5;
-    private static final int DEF_FUSE = 2;
-    private static final int DEF_OWNED = 8;
+    private static final int DEF_PLAYERS = 100;
+    private static final int DEF_MOBS = 5000;
+    private static final int DEF_DUNGEON = 10;
+    private static final int DEF_ONLINE = 48;
 
     /** Một mục tiêu của nhiệm vụ. */
     public static final class Objective {
@@ -52,14 +52,27 @@ public class QuestManager implements Listener {
     private final ElementManager manager;
     private final Settings settings;
     private final NamespacedKey questKey;
-    /** Chống cày: người giết -> (nạn nhân -> thời điểm lần giết gần nhất). Chỉ lưu trong bộ nhớ. */
-    private final Map<UUID, Map<UUID, Long>> lastPlayerKill = new HashMap<>();
+    private final NamespacedKey victimsKey;
 
     public QuestManager(NguyenToPlugin plugin, ElementManager manager, Settings settings) {
         this.plugin = plugin;
         this.manager = manager;
         this.settings = settings;
         this.questKey = new NamespacedKey(plugin, "quest");
+        this.victimsKey = new NamespacedKey(plugin, "quest_victims");
+    }
+
+    /** Bắt đầu vòng kiểm tra mỗi phút (thời gian online không có sự kiện riêng). */
+    public void start() {
+        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                // đếm phút online của chính plugin (dự phòng khi server không có thống kê thời gian chơi)
+                Map<String, Integer> m = read(p);
+                m.put("playmin", m.getOrDefault("playmin", 0) + 1);
+                write(p, m);
+                if (active(p)) checkOnline(p);
+            }
+        }, 1200L, 1200L);
     }
 
     // ------------------------------------------------------------------
@@ -70,46 +83,51 @@ public class QuestManager implements Listener {
         return settings.cfg().getInt("extra-slot.quest." + path, def);
     }
 
-    /** Boss -> số lần cần hạ. Không có mục trong config thì dùng mặc định (Ender Dragon, Wither, Warden). */
-    private Map<String, Integer> bossTargets() {
-        Map<String, Integer> m = new LinkedHashMap<>();
-        ConfigurationSection sec = settings.cfg().getConfigurationSection("extra-slot.quest.kill-bosses");
-        if (sec == null) {
-            m.put("ENDER_DRAGON", 1);
-            m.put("WITHER", 1);
-            m.put("WARDEN", 1);
-            return m;
-        }
-        for (String k : sec.getKeys(false)) {
-            int v = sec.getInt(k, 0);
-            if (v > 0) m.put(k.toUpperCase(Locale.ROOT), v);
-        }
-        return m;
+    private String minRank() {
+        return settings.cfg().getString("extra-slot.quest.dungeon-min-rank", "legendary");
     }
 
-    private static String bossName(String type) {
-        switch (type) {
-            case "ENDER_DRAGON": return "Rồng Ender";
-            case "WITHER": return "Wither";
-            case "WARDEN": return "Warden";
-            case "ELDER_GUARDIAN": return "Elder Guardian";
-            default: return type.toLowerCase(Locale.ROOT).replace('_', ' ');
+    private List<String> rankOrder() {
+        List<String> l = settings.cfg().getStringList("extra-slot.quest.dungeon-ranks");
+        if (l.isEmpty()) {
+            l = java.util.Arrays.asList("common", "uncommon", "rare", "epic", "legendary", "mythic");
         }
+        return l;
+    }
+
+    /** Vị trí của rank trong danh sách (khớp chính xác, hoặc viết tắt từ 3 chữ như "leg" = legendary). -1 nếu không có. */
+    private int rankIndex(String rank) {
+        if (rank == null) return -1;
+        String r = rank.toLowerCase(Locale.ROOT).trim();
+        List<String> order = rankOrder();
+        for (int i = 0; i < order.size(); i++) {
+            if (order.get(i).toLowerCase(Locale.ROOT).equals(r)) return i;
+        }
+        if (r.length() >= 3) {
+            for (int i = 0; i < order.size(); i++) {
+                if (order.get(i).toLowerCase(Locale.ROOT).startsWith(r)) return i;
+            }
+        }
+        return -1;
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return s.substring(0, 1).toUpperCase(Locale.ROOT) + s.substring(1);
     }
 
     public List<Objective> objectives() {
         List<Objective> out = new ArrayList<>();
-        int mobs = cfgInt("kill-mobs", DEF_MOBS);
-        if (mobs > 0) out.add(new Objective("mobs", "Hạ quái vật", mobs));
         int players = cfgInt("kill-players", DEF_PLAYERS);
-        if (players > 0) out.add(new Objective("players", "Hạ người chơi", players));
-        for (Map.Entry<String, Integer> b : bossTargets().entrySet()) {
-            out.add(new Objective("boss:" + b.getKey(), "Hạ " + bossName(b.getKey()), b.getValue()));
+        if (players > 0) out.add(new Objective("players", "Hạ người chơi khác nhau", players));
+        int mobs = cfgInt("kill-mobs", DEF_MOBS);
+        if (mobs > 0) out.add(new Objective("mobs", "Tiêu diệt quái vật", mobs));
+        int dungeon = cfgInt("dungeon-gates", DEF_DUNGEON);
+        if (dungeon > 0) {
+            out.add(new Objective("dungeon", "Hoàn thành cổng dungeon " + capitalize(minRank()) + " trở lên", dungeon));
         }
-        int fuse = cfgInt("fuse-count", DEF_FUSE);
-        if (fuse > 0) out.add(new Objective("fuse", "Kết hợp hợp thể", fuse));
-        int owned = cfgInt("own-elements", DEF_OWNED);
-        if (owned > 0) out.add(new Objective("owned", "Sở hữu nguyên tố khác nhau", owned));
+        int online = cfgInt("online-hours", DEF_ONLINE);
+        if (online > 0) out.add(new Objective("online", "Online đủ (giờ)", online));
         return out;
     }
 
@@ -147,13 +165,37 @@ public class QuestManager implements Listener {
         p.getPersistentDataContainer().set(questKey, PersistentDataType.STRING, sb.toString());
     }
 
+    /** Những người chơi (UUID) đã hạ gục - mỗi người chỉ tính MỘT lần mãi mãi. */
+    private Set<String> victims(Player p) {
+        Set<String> out = new LinkedHashSet<>();
+        String s = p.getPersistentDataContainer().get(victimsKey, PersistentDataType.STRING);
+        if (s == null || s.isEmpty()) return out;
+        for (String part : s.split(",")) {
+            if (!part.isEmpty()) out.add(part);
+        }
+        return out;
+    }
+
+    /** Số giờ đã online: dùng thống kê thời gian chơi của server, không có thì dùng số phút plugin tự đếm. */
+    public double playHours(Player p) {
+        try {
+            return p.getStatistic(Statistic.PLAY_ONE_MINUTE) / 20.0 / 3600.0;
+        } catch (Throwable t) {
+            return read(p).getOrDefault("playmin", 0) / 60.0;
+        }
+    }
+
+    /** Tiến độ hiện tại của một mục tiêu. */
     public int progress(Player p, String key) {
+        if (key.equals("players")) return victims(p).size();
+        if (key.equals("online")) return (int) playHours(p);
         return read(p).getOrDefault(key, 0);
     }
 
     /** Xóa tiến độ nhiệm vụ (admin). Không đụng tới ô thứ 4 đã mở. */
     public void reset(Player p) {
         p.getPersistentDataContainer().remove(questKey);
+        p.getPersistentDataContainer().remove(victimsKey);
     }
 
     private Objective find(String key) {
@@ -163,14 +205,10 @@ public class QuestManager implements Listener {
         return null;
     }
 
-    private void set(Player p, String key, int value) {
-        Map<String, Integer> m = read(p);
-        int before = m.getOrDefault(key, 0);
-        if (value == before) return;
-        m.put(key, value);
-        write(p, m);
+    /** Gọi sau khi một mục tiêu tăng: báo hoàn thành mục tiêu và kiểm tra mở khóa. */
+    private void afterChange(Player p, String key, int before, int after) {
         Objective o = find(key);
-        if (o != null && before < o.target && value >= o.target) {
+        if (o != null && before < o.target && after >= o.target) {
             p.sendMessage("§6✦ Nhiệm vụ ô thứ 4: §a✔ Hoàn thành mục tiêu §f" + o.label + "§a!");
             Fx.actionBar(p, "§6✦ Hoàn thành: §f" + o.label);
             p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.4f);
@@ -179,7 +217,11 @@ public class QuestManager implements Listener {
     }
 
     private void inc(Player p, String key) {
-        set(p, key, progress(p, key) + 1);
+        Map<String, Integer> m = read(p);
+        int before = m.getOrDefault(key, 0);
+        m.put(key, before + 1);
+        write(p, m);
+        afterChange(p, key, before, before + 1);
     }
 
     /** Đủ mọi mục tiêu thì mở khóa. Không có mục tiêu nào thì không tự mở (chỉ admin cấp). */
@@ -187,24 +229,56 @@ public class QuestManager implements Listener {
         if (!active(p)) return;
         List<Objective> obj = objectives();
         if (obj.isEmpty()) return;
-        Map<String, Integer> m = read(p);
         for (Objective o : obj) {
-            if (m.getOrDefault(o.key, 0) < o.target) return;
+            if (progress(p, o.key) < o.target) return;
         }
         manager.setExtraSlot(p, true);
         announceUnlock(p, true);
     }
 
-    /** Gọi khi người chơi kết hợp hợp thể thành công. */
-    public void onFuse(Player p) {
-        if (active(p)) inc(p, "fuse");
+    /** Mục tiêu online: báo khi vừa đủ giờ, rồi kiểm tra mở khóa. */
+    private void checkOnline(Player p) {
+        Objective o = find("online");
+        if (o == null) return;
+        if (progress(p, "online") >= o.target) {
+            Map<String, Integer> m = read(p);
+            if (m.getOrDefault("online_done", 0) == 0) {
+                m.put("online_done", 1);
+                write(p, m);
+                afterChange(p, "online", o.target - 1, o.target);
+                return;
+            }
+        }
+        check(p);
     }
 
-    /** Số nguyên tố khác nhau từng sở hữu (lấy mức cao nhất, vì kết hợp làm giảm số đang sở hữu). */
+    /** Giữ lại cho tương thích: nhiệm vụ mới không còn đếm số lần kết hợp / sưu tầm nguyên tố. */
+    public void onFuse(Player p) {
+        // không dùng nữa
+    }
+
     public void refreshOwned(Player p) {
-        if (!active(p)) return;
-        int now = manager.getOwned(p).size();
-        if (now > progress(p, "owned")) set(p, "owned", now);
+        // không dùng nữa
+    }
+
+    /**
+     * Ghi nhận một cổng dungeon đã hoàn thành (dùng cho lệnh /nguyento quest dungeon, plugin dungeon gọi bằng lệnh khi người chơi
+     * thắng cổng). 'rank' có thể null (khi đó coi như đạt). Trả về null nếu thành công, ngược lại là lý do không tính.
+     */
+    public String addDungeon(Player p, String rank) {
+        if (!active(p)) return "Người chơi không còn nhiệm vụ này (đã mở khóa ô thứ 4 hoặc nhiệm vụ đang tắt).";
+        if (cfgInt("dungeon-gates", DEF_DUNGEON) <= 0) return "Mục tiêu cổng dungeon đang tắt trong config.";
+        if (rank != null) {
+            int got = rankIndex(rank);
+            if (got < 0) return "Rank '" + rank + "' không có trong danh sách dungeon-ranks.";
+            int need = rankIndex(minRank());
+            if (need >= 0 && got < need) {
+                return "Cổng rank " + rank + " thấp hơn rank tối thiểu (" + minRank() + ") nên không được tính.";
+            }
+        }
+        inc(p, "dungeon");
+        Fx.actionBar(p, "§6✦ Nhiệm vụ ô thứ 4: cổng dungeon §f" + progress(p, "dungeon") + "§7/§f" + cfgInt("dungeon-gates", DEF_DUNGEON));
+        return null;
     }
 
     // ------------------------------------------------------------------
@@ -225,9 +299,8 @@ public class QuestManager implements Listener {
             out.add("§7Ô nguyên tố thứ 4 chỉ do admin cấp.");
             return out;
         }
-        Map<String, Integer> m = read(p);
         for (Objective o : objectives()) {
-            int cur = Math.min(o.target, m.getOrDefault(o.key, 0));
+            int cur = Math.min(o.target, progress(p, o.key));
             boolean done = cur >= o.target;
             out.add((done ? "§a✔ " : "§7• ") + o.label + "§7: " + (done ? "§a" : "§f") + cur + "§7/§f" + o.target);
         }
@@ -264,30 +337,21 @@ public class QuestManager implements Listener {
                 && manager.getEquipped(killer).isEmpty()) return;
 
         if (dead instanceof Player) {
-            if (cfgInt("kill-players", DEF_PLAYERS) <= 0) return;
-            long cooldown = (long) (settings.cfg().getDouble("extra-slot.quest.kill-players-cooldown-minutes", 30.0) * 60000.0);
-            Map<UUID, Long> mine = lastPlayerKill.computeIfAbsent(killer.getUniqueId(), k -> new HashMap<>());
-            long now = System.currentTimeMillis();
-            Long last = mine.get(dead.getUniqueId());
-            if (last != null && now - last < cooldown) return; // giết lại cùng một người trong thời gian ngắn không tính
-            mine.put(dead.getUniqueId(), now);
-            inc(killer, "players");
+            int need = cfgInt("kill-players", DEF_PLAYERS);
+            if (need <= 0) return;
+            Set<String> seen = victims(killer);
+            String victim = dead.getUniqueId().toString();
+            if (seen.contains(victim)) return; // giết lại cùng một người không tính
+            int before = seen.size();
+            seen.add(victim);
+            killer.getPersistentDataContainer().set(victimsKey, PersistentDataType.STRING, String.join(",", seen));
+            Fx.actionBar(killer, "§6✦ Nhiệm vụ ô thứ 4: người chơi khác nhau §f" + seen.size() + "§7/§f" + need);
+            afterChange(killer, "players", before, seen.size());
             return;
         }
 
-        String type = dead.getType().name();
-        if (bossTargets().containsKey(type)) {
-            inc(killer, "boss:" + type);
-        } else if (dead instanceof Enemy && cfgInt("kill-mobs", DEF_MOBS) > 0) {
+        if (dead instanceof Enemy && cfgInt("kill-mobs", DEF_MOBS) > 0) {
             inc(killer, "mobs");
         }
-    }
-
-    @EventHandler
-    public void onJoin(PlayerJoinEvent e) {
-        Player p = e.getPlayer();
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (p.isOnline()) refreshOwned(p);
-        }, 40L);
     }
 }

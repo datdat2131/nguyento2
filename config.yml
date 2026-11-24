@@ -26,16 +26,22 @@ extra-slot:
   quest:
     enabled: true                # false = ô thứ 4 chỉ admin mới cấp được
     require-equipped: true       # chỉ tính hạ gục khi đang trang bị ít nhất 1 nguyên tố
-    kill-mobs: 500               # hạ bao nhiêu quái thù địch (0 = bỏ mục tiêu này)
-    kill-players: 5              # hạ bao nhiêu người chơi (0 = bỏ). Giết lại cùng một người trong thời gian hồi bên dưới không tính
-    kill-players-cooldown-minutes: 30
-    kill-bosses:                 # hạ boss: loại: số lần. Thêm/bớt tùy ý (ender_dragon, wither, warden, elder_guardian...)
-      ender_dragon: 1
-      wither: 1
-      warden: 1
-    fuse-count: 2                # kết hợp hợp thể bao nhiêu lần (0 = bỏ)
-    own-elements: 8              # từng sở hữu bao nhiêu nguyên tố khác nhau (0 = bỏ)
-    # Phải hoàn thành TẤT CẢ mục tiêu đang bật. Không còn mục tiêu nào thì ô thứ 4 chỉ admin cấp được.
+    # Phải hoàn thành TẤT CẢ mục tiêu đang bật (đặt 0 để bỏ một mục tiêu):
+    kill-players: 100            # hạ 100 người chơi KHÁC NHAU (giết lại cùng một người không tính, tính mãi mãi)
+    kill-mobs: 5000              # tiêu diệt 5000 quái thù địch
+    dungeon-gates: 10            # hoàn thành 10 cổng dungeon từ rank dungeon-min-rank trở lên
+    dungeon-min-rank: legendary
+    dungeon-ranks:               # thứ tự rank từ thấp đến cao (đổi theo plugin dungeon của bạn)
+      - common
+      - uncommon
+      - rare
+      - epic
+      - legendary
+      - mythic
+    online-hours: 48             # online đủ 48 giờ (tính theo thống kê thời gian chơi của server)
+    # Cổng dungeon: plugin dungeon cần chạy lệnh console khi người chơi thắng cổng, ví dụ:
+    #   nguyento quest dungeon %player% legendary
+    # (rank thấp hơn dungeon-min-rank sẽ không được tính; bỏ rank thì luôn được tính)
 
 # ----------------------------------------------------------------------
 #  BỘ CỘNG HƯỞNG - trang bị đủ 2-3 nguyên tố trong một bộ thì nhận thêm buff
@@ -86,15 +92,83 @@ sets:
     damage-reduction-percent: 5
 
 # ----------------------------------------------------------------------
+#  VÒNG TƯƠNG KHẮC - nguyên tố khắc nhau thì tăng / giảm sát thương
+#  pairs: "A: [B, C]" nghĩa là A khắc B và C. Hợp thể tính theo hai nguyên tố gốc của nó.
+#  Mục tiêu là người chơi: dùng nguyên tố đang mang. Mục tiêu là quái: dùng bảng mobs bên dưới (loại quái VIẾT HOA).
+#  Khắc được mục tiêu: +bonus-percent sát thương. Bị mục tiêu khắc ngược: -penalty-percent sát thương.
+#  Áp dụng cho đòn đánh thường, nội tại và chiêu thức. enabled: false = tắt hoàn toàn.
+# ----------------------------------------------------------------------
+counter:
+  enabled: true
+  bonus-percent: 20
+  penalty-percent: 20
+  pairs:
+    nuoc: [lua]
+    lua: [bang]
+    bang: [gio]
+    gio: [dat]
+    dat: [set]
+    set: [nuoc]
+    anh_sang: [bong_toi]
+    bong_toi: [rong]
+    rong: [anh_sang]
+  mobs:
+    BLAZE: lua
+    MAGMA_CUBE: lua
+    STRIDER: lua
+    GHAST: lua
+    GUARDIAN: nuoc
+    ELDER_GUARDIAN: nuoc
+    DROWNED: nuoc
+    STRAY: bang
+    POLAR_BEAR: bang
+    SNOW_GOLEM: bang
+    VEX: gio
+    CREEPER: set
+    SHULKER: dat
+    IRON_GOLEM: dat
+    ENDERMAN: bong_toi
+    PHANTOM: bong_toi
+    WITHER: bong_toi
+    WITHER_SKELETON: bong_toi
+    ENDER_DRAGON: rong
+
+# ----------------------------------------------------------------------
+#  CUỘN TÁCH HỢP THỂ - trả một hợp thể về 2 nguyên tố gốc
+#  Admin đưa: /nguyento give <người chơi> unfuse [số lượng]. Chuột phải cuộn để mở menu tách.
+# ----------------------------------------------------------------------
+unfuse:
+  enabled: true
+  cost-levels: 0               # số cấp độ tốn thêm mỗi lần tách (ngoài việc tiêu hao 1 cuộn)
+
+# ----------------------------------------------------------------------
+#  THANH NĂNG LƯỢNG (tùy chọn) - thay hồi chiêu cố định của Bóng Tối / Ánh Sáng / Rồng
+#  Bật lên thì 3 chiêu cuối KHÔNG còn dùng hồi chiêu 90 giây nữa mà dùng thanh năng lượng (Boss Bar).
+#  Hồi chiêu của lá chắn Ánh Sáng (nội tại ẩn) và khiên hợp thể không bị ảnh hưởng.
+# ----------------------------------------------------------------------
+energy:
+  enabled: false               # true = dùng thanh năng lượng, false = giữ hồi chiêu cố định như cũ
+  max: 100
+  cost: 100                    # năng lượng tiêu hao mỗi lần dùng chiêu (100 = phải đầy thanh)
+  per-hit: 5                   # + năng lượng mỗi đòn đánh trúng
+  on-damaged: 3                # + năng lượng mỗi lần bị đánh
+  regen-per-second: 0.5        # + năng lượng mỗi giây
+  bar: true                    # hiện thanh Boss Bar
+
+# ----------------------------------------------------------------------
 #  KIỂU NGUYÊN TỐ BAY QUANH NGƯỜI
 # ----------------------------------------------------------------------
 orbit:
-  style: back            # back = xếp hình cánh quạt bay sau lưng | classic = kiểu cũ (trên đầu + hai bên vai)
+  style: ring            # ring = nối đuôi nhau bay thành vòng tròn quay sau lưng (kiểu Cầu Lục Đạo)
+                         # back = xếp hình cánh quạt sau lưng | classic = kiểu cũ (trên đầu + hai bên vai)
+  ring-radius: 1.15      # bán kính vòng tròn (kiểu ring)
+  ring-speed: 1.3        # tốc độ quay (radian mỗi giây, âm = quay ngược)
+  ring-distance: 0.8     # khoảng cách vòng tròn ra phía sau lưng (kiểu ring)
   back-distance: 0.95    # khoảng cách phía sau lưng (block)
   spread-degrees: 50     # độ xòe của hình quạt (0 = dồn hết ra sau lưng, 90 = dàn ngang hai bên)
   height: 1.0            # hệ số độ cao (1.0 = ngang vai - đầu, nhỏ hơn = thấp xuống)
   size: 1.0              # hệ số kích thước chung của mọi nguyên tố bay (từng nguyên tố còn có elements.<id>.orbit-scale)
-  ring: true             # vòng ma pháp phát sáng xoay chậm sau lưng (tắt nếu muốn nhẹ hơn)
+  ring: true             # vòng hạt phát sáng đi theo quỹ đạo các nguyên tố (tắt nếu muốn nhẹ hơn)
 
 # ----------------------------------------------------------------------
 #  HIỆU NĂNG - chỉnh ở đây nếu bị giật / lag

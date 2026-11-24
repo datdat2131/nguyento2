@@ -1,4 +1,4 @@
-# NguyenTo 1.7.1 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
+# NguyenTo 1.9.0 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
 
 ## Build
 Cần JDK 17+ và Maven:  `mvn clean package`  ->  `target/NguyenTo.jar` bỏ vào `plugins/`.
@@ -36,15 +36,24 @@ Toàn bộ con số chỉnh trong `config.yml` (mục `elements.<id>`), phí k�
 Xác suất nội tại của từng hợp thể chỉnh ở `steam-chance`, `sand-chance`, `bolt-chance`, `strike-chance`, `soul-chance`... và có hệ số chung `fusion.passive-chance-percent`.
 Kích thước nguyên tố bay quanh người: `elements.<id>.orbit-scale` (Rồng mặc định 0.6); đầu rồng trong chiêu: `skill.head-scale`.
 
+## Vòng tương khắc, Cuộn Tách Hợp Thể, thanh năng lượng
+- **Vòng tương khắc** (`counter`): nguyên tố khắc nhau thì khắc được +20% sát thương, bị khắc -20%. Bảng khắc và nguyên tố của từng loại quái chỉnh trong config. Menu `/nguyento` hiện bảng khắc.
+- **Cuộn Tách Hợp Thể** (`unfuse`): trả một hợp thể về 2 nguyên tố gốc. Admin đưa bằng `/nguyento give <người chơi> unfuse [số lượng]`, chuột phải cuộn (hoặc `/nguyento unfuse`) để mở menu, click 2 lần để xác nhận.
+- **Thanh năng lượng** (`energy`, mặc định TẮT): bật lên thì Bóng Tối / Ánh Sáng / Rồng dùng thanh năng lượng (Boss Bar) thay cho hồi chiêu 90 giây. Đánh trúng, bị đánh và thời gian sẽ nạp năng lượng.
+
 ## Ô nguyên tố thứ 4
-Mặc định trang bị tối đa 3 nguyên tố. **Ô thứ 4** mở khóa bằng nhiệm vụ khó (hạ quái, hạ người chơi, hạ boss, kết hợp hợp thể, sưu tầm nguyên tố) hoặc do admin cấp.
+Mặc định trang bị tối đa 3 nguyên tố. **Ô thứ 4** mở khóa bằng nhiệm vụ khó hoặc do admin cấp. Nhiệm vụ gồm 4 mục tiêu, phải hoàn thành tất cả:
+1. Hạ **100 người chơi khác nhau** (giết lại cùng một người không tính).
+2. Tiêu diệt **5000 quái**.
+3. Hoàn thành **10 cổng dungeon từ Legendary trở lên**: plugin dungeon cần chạy lệnh console `nguyento quest dungeon %player% <rank>` khi người chơi thắng cổng.
+4. **Online đủ 48 giờ**.
 - Xem tiến độ: `/nguyento quest` hoặc nút sách trong menu `/nguyento`.
 - Admin: `/nguyento slot give|remove|status <người chơi>`, `/nguyento quest reset <người chơi>`.
 - Mọi mục tiêu chỉnh trong `config.yml`, mục `extra-slot` (đặt 0 để bỏ một mục tiêu; `quest.enabled: false` để chỉ admin cấp).
 
 ## Kiểu nguyên tố bay
-Mặc định các nguyên tố xếp hình cánh quạt bay **sau lưng** người chơi (1 cái ở giữa, 2 cái hai bên, 3 cái trái - giữa - phải) kèm vòng ma pháp phát sáng.
-Chỉnh ở mục `orbit` trong `config.yml`: `style` (`back` / `classic` = kiểu cũ), `back-distance`, `spread-degrees`, `height`, `size`, `ring`.
+Mặc định các nguyên tố **nối đuôi nhau bay thành một vòng tròn quay sau lưng** người chơi (kiểu Cầu Lục Đạo).
+Chỉnh ở mục `orbit` trong `config.yml`: `style` (`ring` / `back` = hình cánh quạt / `classic` = kiểu cũ), `ring-radius`, `ring-speed`, `ring-distance`, `height`, `size`, `ring`.
 
 ## Giữ trang bị, bộ cộng hưởng, PvP
 - `general.keep-equipped-on-rejoin` (mặc định bật): thoát game / tắt server rồi vào lại vẫn giữ nguyên nguyên tố đã trang bị (chỉ giữ những nguyên tố còn sở hữu).

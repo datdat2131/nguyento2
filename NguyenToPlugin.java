@@ -24,6 +24,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
     private FusionGui fusionGui;
     private Marks marks;
     private QuestManager quest;
+    private EnergyManager energy;
 
     @Override
     public void onEnable() {
@@ -38,6 +39,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         gui.setFusionGui(fusionGui);
         quest = new QuestManager(this, manager, settings);
         manager.setQuest(quest);
+        quest.start();
         gui.setQuest(quest);
         items = new SkillItems(this, manager, settings);
         manager.setSkillItems(items);
@@ -46,8 +48,15 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         Bukkit.getPluginManager().registerEvents(fusionGui, this);
         Bukkit.getPluginManager().registerEvents(skills, this);
         Bukkit.getPluginManager().registerEvents(quest, this);
-        Bukkit.getPluginManager().registerEvents(new ElementListener(manager), this);
-        Bukkit.getPluginManager().registerEvents(new CombatListener(this, manager, settings, skills, marks), this);
+        ElementListener elementListener = new ElementListener(manager, settings);
+        elementListener.setFusionGui(fusionGui);
+        Bukkit.getPluginManager().registerEvents(elementListener, this);
+        energy = new EnergyManager(manager, settings);
+        skills.setEnergy(energy);
+        CombatListener combat = new CombatListener(this, manager, settings, skills, marks);
+        combat.setEnergy(energy);
+        Bukkit.getPluginManager().registerEvents(combat, this);
+        Bukkit.getPluginManager().registerEvents(energy, this);
         Bukkit.getPluginManager().registerEvents(new SkillItemListener(this, items, skills), this);
 
         getCommand("nguyento").setExecutor(this);
@@ -66,6 +75,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         if (skills != null) skills.shutdown();
         if (manager != null) manager.shutdown();
         if (marks != null) marks.shutdown();
+        if (energy != null) energy.shutdown();
         Vfx.shutdown();
     }
 
@@ -91,6 +101,19 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
             return true;
         }
 
+        if (sub.equals("unfuse") || sub.equals("tach")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Lệnh này chỉ dành cho người chơi.");
+                return true;
+            }
+            if (!settings.unfuseEnabled()) {
+                sender.sendMessage("§cTính năng tách hợp thể đang tắt.");
+                return true;
+            }
+            fusionGui.openUnfuse((Player) sender);
+            return true;
+        }
+
         if (sub.equals("fusion") || sub.equals("hopthe") || sub.equals("fuse")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("Lệnh này chỉ dành cho người chơi.");
@@ -101,6 +124,21 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         }
 
         if (sub.equals("quest") || sub.equals("nhiemvu")) {
+            if (args.length >= 2 && args[1].equalsIgnoreCase("dungeon")) {
+                // /nguyento quest dungeon <người chơi> [rank]  - dành cho plugin dungeon chạy bằng lệnh console khi người chơi thắng cổng
+                if (!sender.hasPermission("nguyento.admin")) {
+                    sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
+                    return true;
+                }
+                Player t = args.length >= 3 ? Bukkit.getPlayerExact(args[2]) : null;
+                if (t == null) {
+                    sender.sendMessage("§eDùng: /nguyento quest dungeon <người chơi đang online> [rank]");
+                    return true;
+                }
+                String err = quest.addDungeon(t, args.length >= 4 ? args[3] : null);
+                sender.sendMessage(err == null ? "§aĐã ghi nhận 1 cổng dungeon cho " + t.getName() + "." : "§e" + err);
+                return true;
+            }
             if (args.length >= 2 && args[1].equalsIgnoreCase("reset")) {
                 if (!sender.hasPermission("nguyento.admin")) {
                     sender.sendMessage("§cBạn không có quyền dùng lệnh này.");
@@ -205,6 +243,23 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
                 return true;
             }
 
+            if (sub.equals("give") && args[2].equalsIgnoreCase("unfuse")) {
+                int n = 1;
+                if (args.length >= 4) {
+                    try {
+                        n = Math.max(1, Math.min(64, Integer.parseInt(args[3])));
+                    } catch (NumberFormatException ex) {
+                        sender.sendMessage("§cSố lượng không hợp lệ.");
+                        return true;
+                    }
+                }
+                ItemStack scroll = manager.createUnfuseScroll(n);
+                target.getInventory().addItem(scroll).values()
+                        .forEach(left -> target.getWorld().dropItemNaturally(target.getLocation(), left));
+                sender.sendMessage("§aĐã đưa " + n + " Cuộn Tách Hợp Thể cho " + target.getName() + ".");
+                return true;
+            }
+
             List<Element> targets = new ArrayList<>();
             if (args[2].equalsIgnoreCase("all")) {
                 targets.addAll(Arrays.asList(Element.values()));
@@ -246,12 +301,15 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         sender.sendMessage("§e/nguyento stats §7- xem chỉ số buff thật đang có");
         sender.sendMessage("§e/nguyento fusion §7- mở menu Hợp Thể (kết hợp 2 nguyên tố, mất 2 nguyên tố gốc)");
         sender.sendMessage("§e/nguyento quest §7- xem tiến độ nhiệm vụ mở ô nguyên tố thứ 4");
+        sender.sendMessage("§e/nguyento unfuse §7- mở menu Tách Hợp Thể (cần Cuộn Tách Hợp Thể)");
         if (sender.hasPermission("nguyento.admin")) {
             sender.sendMessage("§e/nguyento give <người chơi> <nguyên tố|all> [số lượng] §7- đưa cuộn giấy");
+            sender.sendMessage("§e/nguyento give <người chơi> unfuse [số lượng] §7- đưa Cuộn Tách Hợp Thể");
             sender.sendMessage("§e/nguyento unlock <người chơi> <nguyên tố|all> §7- mở khóa trực tiếp");
             sender.sendMessage("§e/nguyento reset [người chơi] §7- bỏ trang bị + xóa buff kẹt, chỉ số về mặc định");
             sender.sendMessage("§e/nguyento slot <give|remove|status> <người chơi> §7- cấp / thu hồi ô nguyên tố thứ 4");
             sender.sendMessage("§e/nguyento quest reset <người chơi> §7- xóa tiến độ nhiệm vụ ô thứ 4");
+            sender.sendMessage("§e/nguyento quest dungeon <người chơi> [rank] §7- ghi nhận 1 cổng dungeon (plugin dungeon gọi)");
             sender.sendMessage("§e/nguyento reload §7- tải lại config.yml");
         }
         return true;
@@ -273,6 +331,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
             out.add("stats");
             out.add("fusion");
             out.add("quest");
+            out.add("unfuse");
             if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reset", "reload", "slot"));
         } else if (sender.hasPermission("nguyento.admin")) {
             if (args.length == 2 && args[0].equalsIgnoreCase("slot")) {
@@ -281,13 +340,16 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
                 for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
             } else if (args.length == 2 && args[0].equalsIgnoreCase("quest")) {
                 out.add("reset");
-            } else if (args.length == 3 && args[0].equalsIgnoreCase("quest") && args[1].equalsIgnoreCase("reset")) {
+                out.add("dungeon");
+            } else if (args.length == 3 && args[0].equalsIgnoreCase("quest")
+                    && (args[1].equalsIgnoreCase("reset") || args[1].equalsIgnoreCase("dungeon"))) {
                 for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
             } else if (args.length == 2 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock")
                     || args[0].equalsIgnoreCase("reset"))) {
                 for (Player p : Bukkit.getOnlinePlayers()) out.add(p.getName());
             } else if (args.length == 3 && (args[0].equalsIgnoreCase("give") || args[0].equalsIgnoreCase("unlock"))) {
                 out.add("all");
+                if (args[0].equalsIgnoreCase("give")) out.add("unfuse");
                 for (Element e : Element.values()) out.add(e.getId());
             }
         }

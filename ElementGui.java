@@ -111,8 +111,8 @@ public class ElementGui implements Listener {
 
                 "",
                 "§7Trang bị tối đa §f" + maxSlots + " §7nguyên tố §8(ô thứ 4: nhiệm vụ khó / admin cấp)§7.",
-                "§7• Nguyên tố xếp hình cánh quạt bay §fsau lưng",
-                "§7  bạn, kèm vòng ma pháp phát sáng",
+                "§7• Nguyên tố nối đuôi nhau bay thành một §fvòng",
+                "§7  tròn quay sau lưng bạn (kiểu Cầu Lục Đạo)",
                 "§7• Click nguyên tố để bật / tắt",
                 "§7• Nhận nguyên tố bằng cuộn giấy",
                 "",
@@ -138,6 +138,19 @@ public class ElementGui implements Listener {
                 }
                 help.add((active.contains(sb) ? "§a✔ " : "§7• ") + sb.colored() + "§7: " + names);
                 if (active.contains(sb)) help.add("§8   " + String.join(", ", sb.describe()));
+            }
+        }
+        if (settings.counterEnabled() && !settings.counterTable().isEmpty()) {
+            help.add("");
+            help.add("§bVòng tương khắc §7(khắc: §a+" + (int) settings.counterBonusPercent() + "%§7, bị khắc: §c-"
+                    + (int) settings.counterPenaltyPercent() + "%§7 sát thương):");
+            for (java.util.Map.Entry<Element, java.util.Set<Element>> en : settings.counterTable().entrySet()) {
+                StringBuilder beaten = new StringBuilder();
+                for (Element b : en.getValue()) {
+                    if (beaten.length() > 0) beaten.append("§7, ");
+                    beaten.append(b.colored());
+                }
+                help.add("§7• " + en.getKey().colored() + " §8▶ " + beaten);
             }
         }
         inv.setItem(INFO_SLOT, icon(Material.BOOK, "§eHướng dẫn", help, false));
