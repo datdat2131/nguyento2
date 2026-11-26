@@ -1,4 +1,4 @@
-# NguyenTo 1.9.0 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
+# NguyenTo 1.10.0 - Hệ thống nguyên tố cho Minecraft (Paper/Spigot 1.20.4 - 1.21.x)
 
 ## Build
 Cần JDK 17+ và Maven:  `mvn clean package`  ->  `target/NguyenTo.jar` bỏ vào `plugins/`.
@@ -35,6 +35,10 @@ Trạng thái dùng trong nội tại: **Thiêu Đốt** = đang cháy; **Ướt
 Toàn bộ con số chỉnh trong `config.yml` (mục `elements.<id>`), phí kết hợp ở `fusion.cost-levels`.
 Xác suất nội tại của từng hợp thể chỉnh ở `steam-chance`, `sand-chance`, `bolt-chance`, `strike-chance`, `soul-chance`... và có hệ số chung `fusion.passive-chance-percent`.
 Kích thước nguyên tố bay quanh người: `elements.<id>.orbit-scale` (Rồng mặc định 0.6); đầu rồng trong chiêu: `skill.head-scale`.
+
+## Khối nguyên tố tự chiến đấu + Giác Ngộ
+- Các khối trên vòng bay sau lưng **tự lao ra tấn công** kẻ địch đang giao chiến với bạn rồi bay về vòng, và **tự chặn đòn** thay bạn (vỡ ra, vài giây sau mọc lại). Chỉnh ở mục `orb`.
+- **Giác Ngộ**: giữ **Shift rồi bấm F** (hoặc `/nguyento awaken`): vòng nở to, quay nhanh, khối tấn công nhanh gấp đôi, cộng sát thương / giảm sát thương / tốc độ. Chỉnh ở mục `awaken`.
 
 ## Vòng tương khắc, Cuộn Tách Hợp Thể, thanh năng lượng
 - **Vòng tương khắc** (`counter`): nguyên tố khắc nhau thì khắc được +20% sát thương, bị khắc -20%. Bảng khắc và nguyên tố của từng loại quái chỉnh trong config. Menu `/nguyento` hiện bảng khắc.

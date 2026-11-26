@@ -52,10 +52,13 @@ public class ElementManager {
 
     public enum UnfuseResult { OK, NOT_FUSION, NOT_OWNED, NO_SCROLL, NO_LEVELS }
 
-    private static class Orbit {
+    static class Orbit {
         final Element element;
         final ItemDisplay display;
         Location lastSent;
+        /** Đang bay đi chiến đấu / hộ vệ: vòng quay không điều khiển khối này cho tới khi nó về. */
+        long busyUntil = 0;
+        long nextAttack = 0;
         long nextKey = 0;
         long nextParticle = 0;
         long nextDust = 0;
@@ -94,6 +97,59 @@ public class ElementManager {
 
     private final Map<UUID, List<Element>> equipped = new HashMap<>();
     private final Map<UUID, List<Orbit>> orbits = new HashMap<>();
+
+    /** Trạng thái xoay của vòng nguyên tố (pha quay và độ nở), cộng dồn theo thời gian để Giác Ngộ đổi tốc độ mượt. */
+    private static final class RingState {
+        double phase = 0.0;
+        double scale = 1.0;
+    }
+
+    private final Map<UUID, RingState> ringStates = new HashMap<>();
+    private OrbBattle battle;
+
+    public void setBattle(OrbBattle battle) {
+        this.battle = battle;
+    }
+
+    private RingState ringState(Player p) {
+        return ringStates.computeIfAbsent(p.getUniqueId(), k -> new RingState());
+    }
+
+    List<Orbit> orbitsOf(Player p) {
+        return orbits.get(p.getUniqueId());
+    }
+
+    long tickNow() {
+        return tick;
+    }
+
+    int teleportInterval() {
+        return interval;
+    }
+
+    int orbitCount(Player p) {
+        List<Orbit> l = orbits.get(p.getUniqueId());
+        return l == null ? 0 : l.size();
+    }
+
+    int indexOf(Player p, Orbit o) {
+        List<Orbit> l = orbits.get(p.getUniqueId());
+        return l == null ? -1 : l.indexOf(o);
+    }
+
+    /** Vị trí chuẩn hiện tại của khối thứ 'index' trên vòng (để khối bay về). */
+    Location homeOf(Player p, int index, int n) {
+        return anchor(p.getLocation(), p.getHeight(), index, n, ringState(p));
+    }
+
+    /** Hệ số sát thương gây ra từ buff tạm thời (khiên hợp thể) + Giác Ngộ. */
+    public double outgoingMultiplier(Player a) {
+        double up = 0;
+        UUID id = a.getUniqueId();
+        for (Element el : getEquipped(a)) up += marks.value(id, Marks.dmgUp(el));
+        if (marks.has(id, Marks.AWAKEN)) up += settings.awakenDamagePercent() / 100.0;
+        return 1.0 + up;
+    }
     private long tick = 0;
     private int statTimer = 0;
     private SkillItems skillItems;
@@ -327,6 +383,7 @@ public class ElementManager {
         safe(() -> syncStats(p, Collections.emptyList()));
         equipped.remove(p.getUniqueId());
         activeSetIds.remove(p.getUniqueId());
+        ringStates.remove(p.getUniqueId());
     }
 
     /** Đặt lại hoàn toàn một người chơi: bỏ trang bị, xóa buff kẹt, chỉ số về mặc định. */
@@ -491,6 +548,7 @@ public class ElementManager {
             if (any) {
                 UUID id = p.getUniqueId();
                 for (Element e : eq) spd += marks.value(id, Marks.speed(e));
+                if (marks.has(id, Marks.AWAKEN)) spd += settings.awakenSpeedPercent() / 100.0;
                 // bộ cộng hưởng (config: sets)
                 for (SetBonus sb : settings.activeSets(eq)) {
                     hp += sb.maxHealth;
@@ -847,6 +905,7 @@ public class ElementManager {
         if (list.size() != expected) return false;
         Location pl = p.getLocation();
         for (Orbit o : list) {
+            if (o.busyUntil > tick) continue; // đang bay đi chiến đấu / hộ vệ
             if (!o.display.isValid()) return false;
             Location last = o.lastSent;
             if (last == null || last.getWorld() != pl.getWorld() || last.distanceSquared(pl) > 144) return false;
@@ -864,7 +923,7 @@ public class ElementManager {
         List<Orbit> list = new ArrayList<>();
         for (int i = 0; i < eq.size(); i++) {
             Element el = eq.get(i);
-            Location at = anchor(pl, height, i, eq.size());
+            Location at = anchor(pl, height, i, eq.size(), ringState(p));
             ItemDisplay d = pl.getWorld().spawn(at, ItemDisplay.class);
             d.setItemStack(displayItem(el));
             d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
@@ -891,9 +950,18 @@ public class ElementManager {
     private void update(Player p, List<Orbit> list) {
         Location pl = p.getLocation();
         double height = p.getHeight();
+
+        // vòng quay: cộng dồn pha; Giác Ngộ làm vòng quay nhanh hơn và nở to dần
+        RingState rs = ringState(p);
+        boolean awake = marks.has(p.getUniqueId(), Marks.AWAKEN);
+        rs.phase += ringSpeed * interval * (awake ? settings.awakenRingSpeedMultiplier() : 1.0);
+        double wantScale = awake ? settings.awakenRingRadiusMultiplier() : 1.0;
+        rs.scale += (wantScale - rs.scale) * 0.2;
+
         for (int i = 0; i < list.size(); i++) {
             Orbit o = list.get(i);
-            Location target = anchor(pl, height, i, list.size());
+            if (o.busyUntil > tick) continue; // khối này đang bay đi chiến đấu / hộ vệ
+            Location target = anchor(pl, height, i, list.size(), rs);
 
             // mốc xoay + nhấp nhô kế tiếp (client tự nội suy giữa các mốc)
             if (tick + interval >= o.nextKey) {
@@ -915,7 +983,8 @@ public class ElementManager {
 
             particles(o, target);
         }
-        backRing(pl, height, list);
+        backRing(pl, height, list, rs);
+        if (battle != null) battle.tick(p, list, tick);
     }
 
     private static float yawDiff(float a, float b) {
@@ -972,19 +1041,21 @@ public class ElementManager {
      * Kiểu "back": xếp hình cánh quạt PHÍA SAU LƯNG (1 cái ở giữa; 2 cái hai bên; 3 cái trái - giữa - phải, cái giữa cao hơn).
      * Kiểu "classic": ô 0 trên đầu, ô 1-2 lơ lửng hai bên vai.
      */
-    private Location anchor(Location pl, double height, int slot, int n) {
+    private Location anchor(Location pl, double height, int slot, int n, RingState rs) {
         double yaw = Math.toRadians(pl.getYaw());
         double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
         double fx = -Math.sin(yaw), fz = Math.cos(yaw);
 
         if (ringStyle) {
             // các nguyên tố nối đuôi nhau bay thành một vòng tròn thẳng đứng quay sau lưng (kiểu Cầu Lục Đạo)
-            double ang = tick * ringSpeed + slot * 2 * Math.PI / Math.max(1, n);
-            double ox = Math.cos(ang) * ringRadius;
-            double oy = Math.sin(ang) * ringRadius;
+            double ang = rs.phase + slot * 2 * Math.PI / Math.max(1, n);
+            double rad = ringRadius * rs.scale;
+            double ox = Math.cos(ang) * rad;
+            double oy = Math.sin(ang) * rad;
+            double lift = ringRadius * (rs.scale - 1.0) * 0.9; // vòng nở to thì nâng lên để không chạm đất
             return new Location(pl.getWorld(),
                     pl.getX() + rx * ox + fx * (-ringDist),
-                    pl.getY() + height * 0.9 * heightFactor + oy,
+                    pl.getY() + height * 0.9 * heightFactor + lift + oy,
                     pl.getZ() + rz * ox + fz * (-ringDist),
                     pl.getYaw(), 0f);
         }
@@ -1052,7 +1123,7 @@ public class ElementManager {
     }
 
     /** Vòng ma pháp phát sáng xoay chậm sau lưng, màu theo các nguyên tố đang trang bị (chỉ kiểu back, config orbit.ring). */
-    private void backRing(Location pl, double height, List<Orbit> list) {
+    private void backRing(Location pl, double height, List<Orbit> list, RingState rs) {
         if (!(ringStyle || backStyle) || !ringOn || !particlesOn || density <= 0 || list.isEmpty()) return;
         Orbit first = list.get(0);
         if (tick < first.nextRing) return;
@@ -1067,9 +1138,9 @@ public class ElementManager {
         double cz;
         if (ringStyle) {
             // vòng bụi mờ đúng quỹ đạo của các nguyên tố
-            radius = ringRadius;
+            radius = ringRadius * rs.scale;
             cx = pl.getX() + fx * (-ringDist);
-            cy = pl.getY() + height * 0.9 * heightFactor;
+            cy = pl.getY() + height * 0.9 * heightFactor + ringRadius * (rs.scale - 1.0) * 0.9;
             cz = pl.getZ() + fz * (-ringDist);
         } else {
             radius = Math.max(0.5, height * 0.52);

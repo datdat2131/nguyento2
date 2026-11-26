@@ -92,6 +92,39 @@ sets:
     damage-reduction-percent: 5
 
 # ----------------------------------------------------------------------
+#  KHỐI NGUYÊN TỐ TỰ CHIẾN ĐẤU (các khối trên vòng bay sau lưng)
+#  - Tự tấn công: lao ra đánh kẻ địch đang giao chiến với bạn (hoặc quái đang nhắm vào bạn) rồi bay về vòng.
+#  - Hộ vệ: lao ra chặn một đòn đánh vào bạn (giảm sát thương), vỡ ra rồi mọc lại sau vài giây.
+#  Mỗi nguyên tố có thể có sát thương riêng bằng dòng orb-damage trong mục elements.<id> (không đặt thì dùng damage bên dưới).
+# ----------------------------------------------------------------------
+orb:
+  attack: true                   # tự tấn công
+  guard: true                    # hộ vệ
+  damage: 4                      # sát thương mỗi lần khối lao trúng (đã nhân buff / tương khắc / giảm PvP)
+  attack-interval-seconds: 3     # mỗi khối lao ra đánh một lần sau bấy nhiêu giây
+  range: 10                      # tầm tìm mục tiêu (tối đa 11 block)
+  combat-seconds: 8              # kẻ địch bạn vừa đánh / vừa đánh bạn được coi là đang giao chiến bấy nhiêu giây
+  guard-reduction-percent: 35    # % sát thương bị khối chặn mất
+  guard-interval-seconds: 1.5    # tối thiểu giữa hai lần chặn
+  respawn-seconds: 6             # khối vỡ sau khi chặn, bấy nhiêu giây sau mọc lại
+
+# ----------------------------------------------------------------------
+#  GIÁC NGỘ - giữ Shift rồi bấm phím F (đổi tay) hoặc /nguyento awaken
+#  Trong thời gian giác ngộ: vòng nguyên tố nở to + quay nhanh, các khối tấn công nhanh hơn, được cộng buff.
+# ----------------------------------------------------------------------
+awaken:
+  enabled: true
+  sneak-swap: true               # true = Shift + F kích hoạt (false = chỉ dùng lệnh)
+  seconds: 15                    # thời gian giác ngộ
+  cooldown: 180                  # hồi chiêu (tính từ lúc kích hoạt)
+  damage-percent: 30             # +% sát thương gây ra
+  reduction-percent: 10          # +% giảm sát thương nhận vào
+  speed-percent: 15              # +% tốc độ di chuyển
+  attack-interval-multiplier: 0.5   # khối tự tấn công nhanh gấp đôi (0.5 = nửa thời gian chờ)
+  ring-radius-multiplier: 1.35   # vòng nở to bấy nhiêu lần
+  ring-speed-multiplier: 2.0     # vòng quay nhanh bấy nhiêu lần
+
+# ----------------------------------------------------------------------
 #  VÒNG TƯƠNG KHẮC - nguyên tố khắc nhau thì tăng / giảm sát thương
 #  pairs: "A: [B, C]" nghĩa là A khắc B và C. Hợp thể tính theo hai nguyên tố gốc của nó.
 #  Mục tiêu là người chơi: dùng nguyên tố đang mang. Mục tiêu là quái: dùng bảng mobs bên dưới (loại quái VIẾT HOA).
@@ -197,6 +230,7 @@ elements:
   # ---------------- LỬA ----------------
   # Buff: kháng lửa (cố định), +damage, +máu | Nội tại: gây cháy
   lua:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 1
     max-health: 2
     ignite-chance: 20        # % gây cháy khi tấn công
@@ -205,6 +239,7 @@ elements:
   # ---------------- BĂNG ----------------
   # (Bạn ghi "+0,5 speed" -> mình hiểu là +5% tốc độ. Sửa lại nếu muốn.)
   bang:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     speed-percent: 5
     max-health: 2
     slow-chance: 15          # % làm chậm mục tiêu khi tấn công
@@ -213,6 +248,7 @@ elements:
 
   # ---------------- NƯỚC ----------------
   nuoc:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     heal-bonus-percent: 20   # +% lượng máu hồi nhận được
     max-health: 3
     heal-on-hit-chance: 10   # % hồi máu khi tấn công
@@ -220,17 +256,20 @@ elements:
 
   # ---------------- ĐẤT ----------------
   dat:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     armor-percent: 20        # +% giáp (nhân với tổng giáp đang có)
     max-health: 4
 
   # ---------------- GIÓ ----------------
   gio:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     speed-percent: 15
     attack-speed-percent: 10
     dodge-chance: 10         # % né đòn
 
   # ---------------- SÉT ----------------
   set:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 2
     attack-speed-percent: 5
     lightning-chance: 10     # % phóng điện khi tấn công
@@ -239,6 +278,7 @@ elements:
 
   # ---------------- BÓNG TỐI (HUYỀN THOẠI) ----------------
   bong_toi:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 3
     lifesteal-percent: 10    # % sát thương gây ra hồi lại thành máu
     dark-chance: 15          # % đòn đánh có thêm sát thương bóng tối
@@ -260,6 +300,7 @@ elements:
   # (Bạn ghi "+15% sát thương nhận vào" -> mình hiểu là GIẢM 15% sát thương nhận vào.
   #  Muốn tăng sát thương nhận thì điền số âm, ví dụ -15.)
   anh_sang:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 2
     damage-reduction-percent: 15
     # Nội tại ẩn: lá chắn máu vàng khi máu thấp
@@ -299,6 +340,7 @@ elements:
 
   # ---------------- FIRE WATER = LỬA + NƯỚC ----------------
   fire_water:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 2
     max-health: 4
     attack-speed-percent: 5
@@ -318,6 +360,7 @@ elements:
 
   # ---------------- BÃO CÁT = ĐẤT + GIÓ ----------------
   bao_cat:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     armor-percent: 30
     max-health: 6
     attack-speed-percent: 10
@@ -339,6 +382,7 @@ elements:
 
   # ---------------- HÀN LÔI = SÉT + BĂNG ----------------
   han_loi:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 3
     max-health: 4
     attack-speed-percent: 5
@@ -359,6 +403,7 @@ elements:
 
   # ---------------- LÔI VIÊM = LỬA + SÉT ----------------
   loi_viem:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 4
     max-health: 4
     speed-percent: 10
@@ -375,6 +420,7 @@ elements:
 
   # ---------------- BĂNG THỦY = NƯỚC + BĂNG ----------------
   bang_thuy:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 2
     max-health: 5
     speed-percent: 8
@@ -385,6 +431,7 @@ elements:
 
   # ---------------- THÁNH LONG = ÁNH SÁNG + RỒNG ----------------
   thanh_long:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 4
     max-health: 6
     armor-percent: 20
@@ -403,6 +450,7 @@ elements:
 
   # ---------------- HẮC LONG = BÓNG TỐI + RỒNG ----------------
   hac_long:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 4
     max-health: 6
     lifesteal-percent: 20          # hút máu 20% sát thương gây ra
@@ -421,6 +469,7 @@ elements:
 
   # ---------------- DUNG NHAM = LỬA + ĐẤT ----------------
   dung_nham:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 3
     max-health: 5
     armor-percent: 15
@@ -431,6 +480,7 @@ elements:
 
   # ---------------- BÃO TỐ = GIÓ + SÉT ----------------
   bao_to:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 3
     max-health: 4
     speed-percent: 8
@@ -441,6 +491,7 @@ elements:
 
   # ---------------- BÃO TUYẾT = GIÓ + BĂNG ----------------
   bao_tuyet:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 3
     max-health: 4
     speed-percent: 8
@@ -452,6 +503,7 @@ elements:
 
   # ---------------- VIÊM LONG = LỬA + RỒNG ----------------
   viem_long:
+    orbit-scale: 1.0               # kích thước nguyên tố bay quanh người (1.0 = mặc định, nhỏ hơn = bé lại)
     damage: 4
     max-health: 5
     inferno-chance: 12

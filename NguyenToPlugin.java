@@ -25,6 +25,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
     private Marks marks;
     private QuestManager quest;
     private EnergyManager energy;
+    private OrbBattle orbBattle;
 
     @Override
     public void onEnable() {
@@ -55,6 +56,10 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         skills.setEnergy(energy);
         CombatListener combat = new CombatListener(this, manager, settings, skills, marks);
         combat.setEnergy(energy);
+        orbBattle = new OrbBattle(this, manager, settings, skills, marks);
+        manager.setBattle(orbBattle);
+        combat.setBattle(orbBattle);
+        Bukkit.getPluginManager().registerEvents(orbBattle, this);
         Bukkit.getPluginManager().registerEvents(combat, this);
         Bukkit.getPluginManager().registerEvents(energy, this);
         Bukkit.getPluginManager().registerEvents(new SkillItemListener(this, items, skills), this);
@@ -98,6 +103,15 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
                 return true;
             }
             for (String line : manager.statLines((Player) sender)) sender.sendMessage(line);
+            return true;
+        }
+
+        if (sub.equals("awaken") || sub.equals("giacngo")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Lệnh này chỉ dành cho người chơi.");
+                return true;
+            }
+            orbBattle.awaken((Player) sender);
             return true;
         }
 
@@ -302,6 +316,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
         sender.sendMessage("§e/nguyento fusion §7- mở menu Hợp Thể (kết hợp 2 nguyên tố, mất 2 nguyên tố gốc)");
         sender.sendMessage("§e/nguyento quest §7- xem tiến độ nhiệm vụ mở ô nguyên tố thứ 4");
         sender.sendMessage("§e/nguyento unfuse §7- mở menu Tách Hợp Thể (cần Cuộn Tách Hợp Thể)");
+        sender.sendMessage("§e/nguyento awaken §7- Giác Ngộ (hoặc giữ Shift rồi bấm phím F đổi tay)");
         if (sender.hasPermission("nguyento.admin")) {
             sender.sendMessage("§e/nguyento give <người chơi> <nguyên tố|all> [số lượng] §7- đưa cuộn giấy");
             sender.sendMessage("§e/nguyento give <người chơi> unfuse [số lượng] §7- đưa Cuộn Tách Hợp Thể");
@@ -332,6 +347,7 @@ public class NguyenToPlugin extends JavaPlugin implements CommandExecutor, TabCo
             out.add("fusion");
             out.add("quest");
             out.add("unfuse");
+            out.add("awaken");
             if (sender.hasPermission("nguyento.admin")) out.addAll(Arrays.asList("give", "unlock", "reset", "reload", "slot"));
         } else if (sender.hasPermission("nguyento.admin")) {
             if (args.length == 2 && args[0].equalsIgnoreCase("slot")) {

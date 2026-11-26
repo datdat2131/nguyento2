@@ -38,6 +38,11 @@ public class CombatListener implements Listener {
     private final Marks marks;
     private final Random rnd = new Random();
     private EnergyManager energy;
+    private OrbBattle battle;
+
+    public void setBattle(OrbBattle battle) {
+        this.battle = battle;
+    }
 
     public void setEnergy(EnergyManager energy) {
         this.energy = energy;
@@ -72,10 +77,7 @@ public class CombatListener implements Listener {
 
     /** Hệ số sát thương gây ra từ các buff tạm thời (vd Hắc Long Hộ Thể +20%). */
     private double outgoing(Player a) {
-        double up = 0;
-        UUID id = a.getUniqueId();
-        for (Element el : manager.getEquipped(a)) up += marks.value(id, Marks.dmgUp(el));
-        return 1.0 + up;
+        return manager.outgoingMultiplier(a);
     }
 
     // ------------------------------------------------------------------
@@ -156,6 +158,7 @@ public class CombatListener implements Listener {
         if (attacker == null || attacker.equals(victim)) return;
         List<Element> eq = manager.getEquipped(attacker);
         if (eq.isEmpty()) return;
+        if (battle != null) battle.noteEngaged(attacker, victim);
 
         // 1) Khuếch đại theo trạng thái đang có trên mục tiêu (đọc TRƯỚC khi nội tại của đòn này kích hoạt)
         if (eq.contains(Element.HAN_LOI) && marks.has(victim, Marks.FROZEN)) shatter(attacker, victim, e);
@@ -639,15 +642,25 @@ public class CombatListener implements Listener {
         List<Element> eq = manager.getEquipped(v);
         if (eq.isEmpty()) return;
         if (energy != null) energy.onDamaged(v);
+        if (battle != null && e instanceof EntityDamageByEntityEvent) {
+            battle.noteEngaged(v, ((EntityDamageByEntityEvent) e).getDamager());
+        }
 
         // Giảm sát thương vĩnh viễn (Ánh Sáng, Thánh Long...)
         double red = 0;
         for (Element el : eq) red += settings.n(el, "damage-reduction-percent");
         for (SetBonus sb : settings.activeSets(eq)) red += sb.damageReductionPercent;
+        if (marks.has(v.getUniqueId(), Marks.AWAKEN)) red += settings.awakenReductionPercent();
         if (red != 0) e.setDamage(e.getDamage() * Math.max(0, 1 - red / 100.0));
 
         // Ánh Sáng: lá chắn máu vàng
         if (eq.contains(Element.ANH_SANG)) skills.onVictimDamage(v, e);
+
+        // khối nguyên tố trên vòng lao ra chặn đòn thay chủ nhân
+        if (battle != null) {
+            double gm = battle.guard(v, e);
+            if (gm < 1.0) e.setDamage(e.getDamage() * gm);
+        }
 
         // Khiên khi máu thấp của hợp thể
         applyGuards(v, eq, e);

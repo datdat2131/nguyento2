@@ -20,6 +20,8 @@ public final class Marks {
     public static final String FROZEN = "frozen";
     public static final String HOLY = "holy";
     public static final String DARK = "dark";
+    /** Trạng thái Giác Ngộ đang chạy. */
+    public static final String AWAKEN = "awaken";
 
     private static final class Entry {
         final long until;

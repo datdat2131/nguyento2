@@ -105,6 +105,28 @@ public class Settings {
         return mobElements.get(entityType.toUpperCase(Locale.ROOT));
     }
 
+    // ---------------- Giác Ngộ ----------------
+
+    public double awakenDamagePercent() {
+        return Math.max(0.0, plugin.getConfig().getDouble("awaken.damage-percent", 30.0));
+    }
+
+    public double awakenReductionPercent() {
+        return Math.max(0.0, plugin.getConfig().getDouble("awaken.reduction-percent", 10.0));
+    }
+
+    public double awakenSpeedPercent() {
+        return plugin.getConfig().getDouble("awaken.speed-percent", 15.0);
+    }
+
+    public double awakenRingRadiusMultiplier() {
+        return Math.max(0.5, plugin.getConfig().getDouble("awaken.ring-radius-multiplier", 1.35));
+    }
+
+    public double awakenRingSpeedMultiplier() {
+        return Math.max(0.1, plugin.getConfig().getDouble("awaken.ring-speed-multiplier", 2.0));
+    }
+
     // ---------------- Cuộn Tách Hợp Thể ----------------
 
     public boolean unfuseEnabled() {
